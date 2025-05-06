@@ -31,6 +31,7 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({
     filterCutoff: 0.8,
     integrationMethod: "euler",
     gravityCompensation: true,
+    calculateFromGyro: true, // Default to true since we're using gyro data
   });
   
   const handleProcess = async () => {
@@ -107,18 +108,37 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="gravity-compensation"
-            checked={options.gravityCompensation}
-            onCheckedChange={(checked) =>
-              setOptions({
-                ...options,
-                gravityCompensation: checked,
-              })
-            }
-          />
-          <Label htmlFor="gravity-compensation">Apply Gravity Compensation</Label>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="gravity-compensation"
+              checked={options.gravityCompensation}
+              onCheckedChange={(checked) =>
+                setOptions({
+                  ...options,
+                  gravityCompensation: checked,
+                })
+              }
+            />
+            <Label htmlFor="gravity-compensation">Apply Gravity Compensation</Label>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="calculate-from-gyro"
+              checked={options.calculateFromGyro}
+              onCheckedChange={(checked) =>
+                setOptions({
+                  ...options,
+                  calculateFromGyro: checked,
+                })
+              }
+            />
+            <Label htmlFor="calculate-from-gyro">Calculate Acceleration from Gyroscope Data</Label>
+            <div className="text-xs text-gray-500 ml-2">
+              (Enable this since your data doesn't include acceleration values)
+            </div>
+          </div>
         </div>
         
         <div className="pt-2">

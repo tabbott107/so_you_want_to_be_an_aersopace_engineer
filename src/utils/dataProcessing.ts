@@ -29,6 +29,33 @@ const calculateTimeDelta = (current: IMUDataPoint, previous: IMUDataPoint): numb
   return timeDiff > 1000 ? timeDiff / 1000 : timeDiff;
 };
 
+// Estimate acceleration from gyroscope data
+// This is a simplified model - more sophisticated models would use sensor fusion
+const estimateAccelerationFromGyro = (
+  gyroX: number,
+  gyroY: number,
+  gyroZ: number,
+  previousGyroX: number,
+  previousGyroY: number,
+  previousGyroZ: number,
+  dt: number
+): { accelX: number; accelY: number; accelZ: number } => {
+  // Calculate angular acceleration by taking the derivative of angular velocity
+  const angularAccelX = (gyroX - previousGyroX) / dt;
+  const angularAccelY = (gyroY - previousGyroY) / dt;
+  const angularAccelZ = (gyroZ - previousGyroZ) / dt;
+  
+  // Convert angular acceleration to linear acceleration
+  // This is a simplified model - would need actual radius information for more accuracy
+  // Using an arbitrary radius of 0.1 meters for demonstration
+  const radius = 0.1;
+  const accelX = angularAccelX * radius;
+  const accelY = angularAccelY * radius;
+  const accelZ = angularAccelZ * radius;
+  
+  return { accelX, accelY, accelZ };
+};
+
 // Calculate instantaneous acceleration and velocity using Euler method
 const calculateEuler = (
   data: IMUDataPoint[],
@@ -52,27 +79,42 @@ const calculateEuler = (
   // Process the rest of the data
   for (let i = 1; i < data.length; i++) {
     const current = data[i];
-    const previous = processedData[i - 1];
-    const dt = calculateTimeDelta(current, data[i - 1]);
+    const previous = data[i - 1];
+    const prevProcessed = processedData[i - 1];
+    const dt = calculateTimeDelta(current, previous);
     
-    // Gravity compensation (approximate 9.81 m/s^2)
+    // Determine acceleration values
     let accelX = current.accelX;
     let accelY = current.accelY;
     let accelZ = current.accelZ;
     
+    // If calculateFromGyro is enabled and acceleration data is zeroed out, estimate from gyro
+    if (options.calculateFromGyro && 
+        accelX === 0 && accelY === 0 && accelZ === 0) {
+      const estimated = estimateAccelerationFromGyro(
+        current.gyroX, current.gyroY, current.gyroZ,
+        previous.gyroX, previous.gyroY, previous.gyroZ,
+        dt
+      );
+      accelX = estimated.accelX;
+      accelY = estimated.accelY;
+      accelZ = estimated.accelZ;
+    }
+    
+    // Gravity compensation (approximate 9.81 m/s^2)
     if (options.gravityCompensation) {
       // Simple gravity compensation - remove approximately 1G from the vertical axis
       // This is a very simplified approach - a real implementation would use sensor fusion
-      accelZ = current.accelZ - 9.81;
+      accelZ = accelZ - 9.81;
     }
     
     // Calculate instantaneous acceleration magnitude
     const instantAccel = calculateMagnitude(accelX, accelY, accelZ);
     
     // Integrate acceleration to get velocity (Euler method)
-    const velocityX = previous.velocityX + accelX * dt;
-    const velocityY = previous.velocityY + accelY * dt;
-    const velocityZ = previous.velocityZ + accelZ * dt;
+    const velocityX = prevProcessed.velocityX + accelX * dt;
+    const velocityY = prevProcessed.velocityY + accelY * dt;
+    const velocityZ = prevProcessed.velocityZ + accelZ * dt;
     
     // Calculate speed magnitude
     const speed = calculateMagnitude(velocityX, velocityY, velocityZ);
@@ -117,13 +159,27 @@ const calculateRK4 = (
     const prevProcessed = processedData[i - 1];
     const dt = calculateTimeDelta(current, previous);
     
-    // Gravity compensation
+    // Determine acceleration values
     let accelX = current.accelX;
     let accelY = current.accelY;
     let accelZ = current.accelZ;
     
+    // If calculateFromGyro is enabled and acceleration data is zeroed out, estimate from gyro
+    if (options.calculateFromGyro && 
+        accelX === 0 && accelY === 0 && accelZ === 0) {
+      const estimated = estimateAccelerationFromGyro(
+        current.gyroX, current.gyroY, current.gyroZ,
+        previous.gyroX, previous.gyroY, previous.gyroZ,
+        dt
+      );
+      accelX = estimated.accelX;
+      accelY = estimated.accelY;
+      accelZ = estimated.accelZ;
+    }
+    
+    // Gravity compensation
     if (options.gravityCompensation) {
-      accelZ = current.accelZ - 9.81;
+      accelZ = accelZ - 9.81;
     }
     
     // Calculate instantaneous acceleration magnitude

@@ -31,44 +31,55 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) => {
       }
 
       const headers = lines[0].split(",").map(h => h.trim());
-      const requiredHeaders = ["timestamp", "accelX", "accelY", "accelZ", "gyroX", "gyroY", "gyroZ", "pressure"];
       
-      // Check for required headers (case insensitive)
-      const headersLower = headers.map(h => h.toLowerCase());
-      const missingHeaders = requiredHeaders.filter(
-        h => !headersLower.some(header => header.includes(h.toLowerCase()))
-      );
-
-      if (missingHeaders.length > 0) {
-        throw new Error(`Missing required headers: ${missingHeaders.join(", ")}`);
-      }
-
-      // Find the index of each required header
-      const headerIndices: { [key: string]: number } = {};
-      requiredHeaders.forEach(requiredHeader => {
-        const index = headersLower.findIndex(h => h.includes(requiredHeader.toLowerCase()));
-        headerIndices[requiredHeader] = index;
-      });
-
+      // Map the headers from your CSV format to the expected format
+      const headerMapping: { [key: string]: string } = {
+        "Time (s)": "timestamp",
+        "Gyro X": "gyroX",
+        "Y": "gyroY",
+        "Z (rad/s)": "gyroZ",
+        "Pressure (p": "pressure",
+        "Temp (C)": "temperature" // Extra column not used in the app's data model
+      };
+      
+      // For acceleration, we'll use zeros as placeholders since they're missing
+      // from your CSV but required by the app
+      
       const data = lines.slice(1).map(line => {
         const values = line.split(",").map(v => v.trim());
         if (values.length !== headers.length) {
           throw new Error("CSV row has incorrect number of columns");
         }
 
+        const timestamp = parseFloat(values[headers.findIndex(h => h === "Time (s)")]);
+        const gyroX = parseFloat(values[headers.findIndex(h => h === "Gyro X")]);
+        const gyroY = parseFloat(values[headers.findIndex(h => h === "Y")]);
+        const gyroZ = parseFloat(values[headers.findIndex(h => h === "Z (rad/s)")]);
+        
+        // Handle the pressure column which might be combined with temperature
+        let pressure = 0;
+        const pressureIndex = headers.findIndex(h => h.includes("Pressure"));
+        if (pressureIndex >= 0) {
+          pressure = parseFloat(values[pressureIndex]);
+        }
+
+        // Since acceleration data is missing, we'll use zeros as placeholders
         return {
-          timestamp: parseFloat(values[headerIndices.timestamp]),
-          accelX: parseFloat(values[headerIndices.accelX]),
-          accelY: parseFloat(values[headerIndices.accelY]),
-          accelZ: parseFloat(values[headerIndices.accelZ]),
-          gyroX: parseFloat(values[headerIndices.gyroX]),
-          gyroY: parseFloat(values[headerIndices.gyroY]),
-          gyroZ: parseFloat(values[headerIndices.gyroZ]),
-          pressure: parseFloat(values[headerIndices.pressure]),
+          timestamp,
+          accelX: 0, // Placeholder
+          accelY: 0, // Placeholder
+          accelZ: 0, // Placeholder
+          gyroX,
+          gyroY,
+          gyroZ,
+          pressure
         };
       });
 
-      return { headers, data };
+      return { 
+        headers: Object.values(headerMapping), 
+        data 
+      };
     } catch (error) {
       setError((error as Error).message);
       return null;
@@ -152,7 +163,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) => {
             Drag & drop your CSV file here or click to browse
           </p>
           <p className="text-sm text-gray-500">
-            File must contain IMU data (acceleration, gyroscope) and pressure data
+            File will be parsed according to the expected format
           </p>
         </div>
       </div>
@@ -164,14 +175,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) => {
       )}
 
       <div className="text-sm text-gray-500 space-y-2">
-        <p><strong>Required CSV format:</strong></p>
-        <p>Your CSV file must include columns for:</p>
+        <p><strong>Expected CSV format:</strong></p>
+        <p>Your CSV file should include columns for:</p>
         <ul className="list-disc list-inside pl-4">
-          <li>timestamp - Time data was recorded</li>
-          <li>accelX, accelY, accelZ - Acceleration values</li>
-          <li>gyroX, gyroY, gyroZ - Gyroscope values</li>
-          <li>pressure - Pressure sensor data</li>
+          <li>Time (s) - Time data was recorded</li>
+          <li>Gyro X, Y, Z (rad/s) - Gyroscope values</li>
+          <li>Pressure (p) - Pressure sensor data</li>
+          <li>Temp (C) - Temperature data (optional)</li>
         </ul>
+        <p className="mt-2 italic">Note: Missing acceleration data will be initialized to zero.</p>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ export interface IMUDataPoint {
   gyroY: number;
   gyroZ: number;
   pressure: number;
+  temperature?: number; // Optional temperature field
 }
 
 export interface ProcessedDataPoint extends IMUDataPoint {
@@ -34,4 +35,5 @@ export interface ProcessingOptions {
   filterCutoff?: number;
   integrationMethod: 'euler' | 'rk4';
   gravityCompensation: boolean;
+  calculateFromGyro?: boolean; // New option to calculate acceleration from gyroscope data
 }
