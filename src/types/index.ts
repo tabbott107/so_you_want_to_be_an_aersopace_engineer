@@ -1,14 +1,7 @@
 
 export interface IMUDataPoint {
   timestamp: number;
-  accelX: number;
-  accelY: number;
-  accelZ: number;
-  gyroX: number;
-  gyroY: number;
-  gyroZ: number;
-  pressure: number;
-  temperature?: number; // Optional temperature field
+  [key: string]: number; // Dynamic columns
 }
 
 export interface ProcessedDataPoint extends IMUDataPoint {
@@ -20,7 +13,8 @@ export interface ProcessedDataPoint extends IMUDataPoint {
 }
 
 export interface RawData {
-  headers: string[];
+  headers: Array<string | { original: string, display: string, selected: boolean }>;
+  timeColumnIndex: number;
   data: IMUDataPoint[];
 }
 
@@ -35,5 +29,11 @@ export interface ProcessingOptions {
   filterCutoff?: number;
   integrationMethod: 'euler' | 'rk4';
   gravityCompensation: boolean;
-  calculateFromGyro?: boolean; // New option to calculate acceleration from gyroscope data
+  calculateFromGyro?: boolean;
+}
+
+export interface AircraftParameters {
+  wingSurfaceArea: number;
+  aircraftWeight: number;
+  airDensity: number;
 }

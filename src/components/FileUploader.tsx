@@ -30,54 +30,49 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) => {
         throw new Error("CSV file must contain headers and at least one row of data");
       }
 
+      // Extract headers from first row and clean them
       const headers = lines[0].split(",").map(h => h.trim());
       
-      // Map the headers from your CSV format to the expected format
-      const headerMapping: { [key: string]: string } = {
-        "Time (s)": "timestamp",
-        "Gyro X": "gyroX",
-        "Y": "gyroY",
-        "Z (rad/s)": "gyroZ",
-        "Pressure (p": "pressure",
-        "Temp (C)": "temperature" // Extra column not used in the app's data model
-      };
+      // Verify that the first column is time (in seconds)
+      const timeColumnIndex = headers.findIndex(h => 
+        h.toLowerCase().includes("time") || h.toLowerCase().includes("t (s)") || h.toLowerCase() === "t");
       
-      // For acceleration, we'll use zeros as placeholders since they're missing
-      // from your CSV but required by the app
+      if (timeColumnIndex === -1) {
+        throw new Error("First column must be time in seconds. Please check your CSV format.");
+      }
       
+      // Map all headers to use as columns for visualization
+      const mappedHeaders = headers.map(header => ({
+        original: header,
+        display: header,
+        selected: false
+      }));
+      
+      // Extract data rows
       const data = lines.slice(1).map(line => {
         const values = line.split(",").map(v => v.trim());
         if (values.length !== headers.length) {
           throw new Error("CSV row has incorrect number of columns");
         }
 
-        const timestamp = parseFloat(values[headers.findIndex(h => h === "Time (s)")]);
-        const gyroX = parseFloat(values[headers.findIndex(h => h === "Gyro X")]);
-        const gyroY = parseFloat(values[headers.findIndex(h => h === "Y")]);
-        const gyroZ = parseFloat(values[headers.findIndex(h => h === "Z (rad/s)")]);
-        
-        // Handle the pressure column which might be combined with temperature
-        let pressure = 0;
-        const pressureIndex = headers.findIndex(h => h.includes("Pressure"));
-        if (pressureIndex >= 0) {
-          pressure = parseFloat(values[pressureIndex]);
-        }
-
-        // Since acceleration data is missing, we'll use zeros as placeholders
-        return {
-          timestamp,
-          accelX: 0, // Placeholder
-          accelY: 0, // Placeholder
-          accelZ: 0, // Placeholder
-          gyroX,
-          gyroY,
-          gyroZ,
-          pressure
+        // Create a data point with timestamp and all other columns as numerical values
+        const dataPoint: any = {
+          timestamp: parseFloat(values[timeColumnIndex])
         };
+        
+        // Add other columns dynamically
+        headers.forEach((header, index) => {
+          if (index !== timeColumnIndex) {
+            dataPoint[header.replace(/\s+/g, '_').toLowerCase()] = parseFloat(values[index]);
+          }
+        });
+
+        return dataPoint;
       });
 
       return { 
-        headers: Object.values(headerMapping), 
+        headers: mappedHeaders,
+        timeColumnIndex,
         data 
       };
     } catch (error) {
@@ -176,14 +171,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUploaded }) => {
 
       <div className="text-sm text-gray-500 space-y-2">
         <p><strong>Expected CSV format:</strong></p>
-        <p>Your CSV file should include columns for:</p>
+        <p>Your CSV file should include:</p>
         <ul className="list-disc list-inside pl-4">
-          <li>Time (s) - Time data was recorded</li>
-          <li>Gyro X, Y, Z (rad/s) - Gyroscope values</li>
-          <li>Pressure (p) - Pressure sensor data</li>
-          <li>Temp (C) - Temperature data (optional)</li>
+          <li>Time column (in seconds) which should be the first column</li>
+          <li>Any number of additional data columns (e.g., Gyro X, Y, Z, Pressure, etc.)</li>
+          <li>Headers in the first row with meaningful names</li>
         </ul>
-        <p className="mt-2 italic">Note: Missing acceleration data will be initialized to zero.</p>
+        <p className="mt-2 italic">The application will automatically detect all columns for visualization.</p>
       </div>
     </div>
   );
