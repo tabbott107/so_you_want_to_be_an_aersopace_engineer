@@ -26,7 +26,6 @@ export interface ProcessedData {
 
 export interface ProcessingOptions {
   sampleRate?: number;
-  filterCutoff?: number;
   integrationMethod: 'euler' | 'rk4';
   gravityCompensation: boolean;
   calculateFromGyro?: boolean;
@@ -36,4 +35,19 @@ export interface AircraftParameters {
   wingSurfaceArea: number;
   aircraftWeight: number;
   airDensity: number;
+}
+
+export interface FlightBounds {
+  flightStart: number;
+  flightEnd: number;
+  stationaryStart: number;
+  stationaryEnd: number;
+}
+
+export interface AerodynamicCoefficient {
+  timestamp: number;
+  CL: number;
+  CD: number;
+  velocity: number;
+  dynamicPressure: number;
 }

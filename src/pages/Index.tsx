@@ -5,21 +5,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FileUploader from "@/components/FileUploader";
 import DataVisualizer from "@/components/DataVisualizer";
-import ProcessingControls from "@/components/ProcessingControls";
 import AircraftParametersForm from "@/components/AircraftParametersForm";
-import { ProcessedData, RawData, AircraftParameters } from "@/types";
-import { Rocket, Plane, Wind, Gauge } from "lucide-react";
+import FlightBoundsSelector from "@/components/FlightBoundsSelector";
+import AnalyzeFlight from "@/pages/AnalyzeFlight";
+import { RawData, AircraftParameters, FlightBounds } from "@/types";
+import { Rocket, Plane, Wind, Gauge, BarChart3 } from "lucide-react";
 
 const Index = () => {
   const [rawData, setRawData] = useState<RawData | null>(null);
-  const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [aircraftParams, setAircraftParams] = useState<AircraftParameters | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [flightBounds, setFlightBounds] = useState<FlightBounds | null>(null);
   const [activeTab, setActiveTab] = useState<string>("upload");
+  const [showAnalysis, setShowAnalysis] = useState<boolean>(false);
 
   const handleFileUploaded = (data: RawData) => {
     setRawData(data);
-    setProcessedData(null);
+    setFlightBounds(null);
+    setShowAnalysis(false);
     setActiveTab("parameters");
   };
 
@@ -28,11 +30,26 @@ const Index = () => {
     setActiveTab("visualize");
   };
 
-  const handleDataProcessed = (data: ProcessedData) => {
-    setProcessedData(data);
-    setIsProcessing(false);
-    setActiveTab("export");
+  const handleBoundsSet = (bounds: FlightBounds) => {
+    setFlightBounds(bounds);
+    setShowAnalysis(true);
   };
+
+  const handleBackToVisualization = () => {
+    setShowAnalysis(false);
+    setActiveTab("visualize");
+  };
+
+  if (showAnalysis && rawData && flightBounds && aircraftParams) {
+    return (
+      <AnalyzeFlight
+        data={rawData}
+        bounds={flightBounds}
+        aircraftParams={aircraftParams}
+        onBack={handleBackToVisualization}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white">
@@ -57,11 +74,11 @@ const Index = () => {
             </TabsTrigger>
             <TabsTrigger value="visualize" disabled={!rawData || !aircraftParams} className="flex items-center justify-center">
               <Gauge className="h-4 w-4 mr-2" />
-              Visualize Data
+              Set Flight Bounds
             </TabsTrigger>
-            <TabsTrigger value="export" disabled={!processedData} className="flex items-center justify-center">
-              <Rocket className="h-4 w-4 mr-2" />
-              Export Results
+            <TabsTrigger value="results" disabled={!flightBounds} className="flex items-center justify-center">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Flight Analysis
             </TabsTrigger>
           </TabsList>
           
@@ -110,7 +127,7 @@ const Index = () => {
                     onClick={() => setActiveTab("visualize")} 
                     className="mt-4 w-full"
                   >
-                    Continue to Data Visualization
+                    Continue to Flight Bounds Selection
                   </Button>
                 </CardContent>
               </Card>
@@ -122,19 +139,17 @@ const Index = () => {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Gauge className="mr-2" />
-                  Flight Data Visualization
+                  Flight Data Visualization & Bounds Selection
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {rawData && (
                   <>
                     <DataVisualizer data={rawData} />
-                    <div className="mt-6 pt-6 border-t border-gray-200">
-                      <h3 className="text-lg font-medium mb-4">Process Data for Analysis</h3>
-                      <ProcessingControls 
-                        data={rawData} 
-                        onProcessingStart={() => setIsProcessing(true)}
-                        onProcessingComplete={handleDataProcessed}
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                      <FlightBoundsSelector 
+                        data={rawData}
+                        onBoundsSet={handleBoundsSet}
                       />
                     </div>
                   </>
@@ -143,50 +158,25 @@ const Index = () => {
             </Card>
           </TabsContent>
           
-          <TabsContent value="export" className="mt-6">
+          <TabsContent value="results" className="mt-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Rocket className="mr-2" />
-                  Export Processed Flight Data
+                  <BarChart3 className="mr-2" />
+                  Flight Analysis Complete
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {processedData && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-medium">Processed Results</h3>
-                      <DataVisualizer data={processedData} />
-                    </div>
-                    
-                    <div className="flex justify-center">
-                      <Button
-                        onClick={() => {
-                          const csvContent = processedData.csvContent;
-                          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.setAttribute("href", url);
-                          link.setAttribute("download", "processed_flight_data.csv");
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        }}
-                        className="w-full sm:w-auto"
-                      >
-                        <Plane className="mr-2 h-4 w-4" /> Download Processed Data (CSV)
-                      </Button>
-                    </div>
-                    
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-4">
-                      <h4 className="font-medium text-blue-800 mb-2">Coming Soon: Aerodynamic Coefficient Calculations</h4>
-                      <p className="text-blue-700 text-sm">
-                        In an upcoming update, this data will be used to calculate drag and lift coefficients 
-                        based on your aircraft parameters and flight data.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                <div className="text-center py-8">
+                  <p className="text-gray-600 mb-4">Flight bounds have been set and analysis is ready.</p>
+                  <Button
+                    onClick={() => setShowAnalysis(true)}
+                    className="w-full sm:w-auto"
+                  >
+                    <Rocket className="mr-2 h-4 w-4" /> 
+                    View Aerodynamic Analysis
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
