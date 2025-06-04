@@ -17,6 +17,12 @@ const Index = () => {
   const [flightBounds, setFlightBounds] = useState<FlightBounds | null>(null);
   const [activeTab, setActiveTab] = useState<string>("upload");
   const [showAnalysis, setShowAnalysis] = useState<boolean>(false);
+  
+  // Flight boundary state
+  const [flightStart, setFlightStart] = useState(10);
+  const [flightEnd, setFlightEnd] = useState(90);
+  const [stationaryStart, setStationaryStart] = useState(0);
+  const [stationaryEnd, setStationaryEnd] = useState(8);
 
   const handleFileUploaded = (data: RawData) => {
     setRawData(data);
@@ -38,6 +44,42 @@ const Index = () => {
   const handleBackToVisualization = () => {
     setShowAnalysis(false);
     setActiveTab("visualize");
+  };
+
+  const handleChartClick = (event: any) => {
+    if (!event || !event.activeLabel || !rawData) return;
+    
+    // Find the clicked time position
+    const clickedTime = parseFloat(event.activeLabel);
+    const totalTime = rawData.data.length > 0 ? 
+      ((rawData.data[rawData.data.length - 1].timestamp - rawData.data[0].timestamp) / 1000) : 1;
+    
+    const clickedPercentage = (clickedTime / totalTime) * 100;
+    
+    // Determine which slider to move based on proximity
+    const distances = [
+      { slider: 'stationaryStart', distance: Math.abs(clickedPercentage - stationaryStart) },
+      { slider: 'stationaryEnd', distance: Math.abs(clickedPercentage - stationaryEnd) },
+      { slider: 'flightStart', distance: Math.abs(clickedPercentage - flightStart) },
+      { slider: 'flightEnd', distance: Math.abs(clickedPercentage - flightEnd) }
+    ];
+    
+    const closest = distances.reduce((min, curr) => curr.distance < min.distance ? curr : min);
+    
+    switch (closest.slider) {
+      case 'stationaryStart':
+        setStationaryStart(clickedPercentage);
+        break;
+      case 'stationaryEnd':
+        setStationaryEnd(clickedPercentage);
+        break;
+      case 'flightStart':
+        setFlightStart(clickedPercentage);
+        break;
+      case 'flightEnd':
+        setFlightEnd(clickedPercentage);
+        break;
+    }
   };
 
   if (showAnalysis && rawData && flightBounds && aircraftParams) {
@@ -142,16 +184,30 @@ const Index = () => {
                   Flight Data Visualization & Bounds Selection
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-6">
                 {rawData && (
                   <>
-                    <DataVisualizer data={rawData} />
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                      <FlightBoundsSelector 
-                        data={rawData}
-                        onBoundsSet={handleBoundsSet}
-                      />
-                    </div>
+                    <FlightBoundsSelector 
+                      data={rawData}
+                      onBoundsSet={handleBoundsSet}
+                      flightStart={flightStart}
+                      flightEnd={flightEnd}
+                      stationaryStart={stationaryStart}
+                      stationaryEnd={stationaryEnd}
+                      onFlightStartChange={setFlightStart}
+                      onFlightEndChange={setFlightEnd}
+                      onStationaryStartChange={setStationaryStart}
+                      onStationaryEndChange={setStationaryEnd}
+                    />
+                    
+                    <DataVisualizer 
+                      data={rawData} 
+                      flightStart={flightStart}
+                      flightEnd={flightEnd}
+                      stationaryStart={stationaryStart}
+                      stationaryEnd={stationaryEnd}
+                      onChartClick={handleChartClick}
+                    />
                   </>
                 )}
               </CardContent>

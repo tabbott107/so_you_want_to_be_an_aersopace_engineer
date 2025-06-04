@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RawData, ProcessedData, IMUDataPoint, ProcessedDataPoint } from "@/types";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { Compass, Gauge, Rocket } from "lucide-react";
 
 // Color palette for aerospace theme
@@ -20,9 +20,21 @@ const CHART_COLORS = [
 
 interface DataVisualizerProps {
   data: RawData | ProcessedData;
+  flightStart?: number;
+  flightEnd?: number;
+  stationaryStart?: number;
+  stationaryEnd?: number;
+  onChartClick?: (event: any) => void;
 }
 
-const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
+const DataVisualizer: React.FC<DataVisualizerProps> = ({ 
+  data, 
+  flightStart = 10, 
+  flightEnd = 90, 
+  stationaryStart = 0, 
+  stationaryEnd = 8,
+  onChartClick 
+}) => {
   // Check if we're working with processed data
   const isProcessedData = 'processedData' in data;
   
@@ -78,6 +90,12 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
       : (point.timestamp - chartData[0].timestamp).toFixed(2)
   }));
 
+  // Get reference line positions based on percentage
+  const getReferencePosition = (percentage: number) => {
+    const index = Math.floor((percentage / 100) * formattedData.length);
+    return formattedData[index]?.displayTime;
+  };
+
   const handleColumnToggle = (column: string) => {
     setSelectedColumns(prev => 
       prev.includes(column) 
@@ -117,11 +135,12 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
         <Card className="p-4 md:w-3/4">
           <h3 className="text-lg font-medium mb-4 flex items-center">
             <Gauge className="mr-2" /> Time Series Data
+            {onChartClick && <span className="text-sm text-gray-600 ml-4">Click on the chart to move the nearest boundary</span>}
           </h3>
           <div className="h-64 md:h-[350px]">
             {selectedColumns.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={formattedData}>
+                <LineChart data={formattedData} onClick={onChartClick}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="displayTime" 
@@ -151,6 +170,34 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
                       />
                     );
                   })}
+                  {onChartClick && (
+                    <>
+                      <ReferenceLine 
+                        x={getReferencePosition(flightStart)} 
+                        stroke="green" 
+                        strokeDasharray="5 5" 
+                        label="Flight Start" 
+                      />
+                      <ReferenceLine 
+                        x={getReferencePosition(flightEnd)} 
+                        stroke="red" 
+                        strokeDasharray="5 5" 
+                        label="Flight End" 
+                      />
+                      <ReferenceLine 
+                        x={getReferencePosition(stationaryStart)} 
+                        stroke="blue" 
+                        strokeDasharray="5 5" 
+                        label="Stationary Start" 
+                      />
+                      <ReferenceLine 
+                        x={getReferencePosition(stationaryEnd)} 
+                        stroke="purple" 
+                        strokeDasharray="5 5" 
+                        label="Stationary End" 
+                      />
+                    </>
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             ) : (
