@@ -116,34 +116,82 @@ const butterworthFilter = (data: number[], cutoffHz: number = 2.5, sampleRate: n
   return filtered;
 };
 
+// Helper function to extract sensor data from IMU point
+const extractSensorData = (point: IMUDataPoint) => {
+  console.log("Point keys:", Object.keys(point));
+  console.log("Sample point data:", point);
+  
+  // Try to find acceleration data - look for common column names
+  const accelX = point.accelX || point.accel_x || point['accel x'] || point.ax || point.AccelX || 0;
+  const accelY = point.accelY || point.accel_y || point['accel y'] || point.ay || point.AccelY || 0;
+  const accelZ = point.accelZ || point.accel_z || point['accel z'] || point.az || point.AccelZ || 0;
+  
+  // Try to find quaternion data - look for common column names
+  const qw = point.qw || point.q_w || point['q w'] || point.w || point.QuatW || 1;
+  const qx = point.qx || point.q_x || point['q x'] || point.x || point.QuatX || 0;
+  const qy = point.qy || point.q_y || point['q y'] || point.y || point.QuatY || 0;
+  const qz = point.qz || point.q_z || point['q z'] || point.z || point.QuatZ || 0;
+  
+  // Try to find gyroscope data
+  const gyroX = point.gyroX || point.gyro_x || point['gyro x'] || point.gx || point.GyroX || 0;
+  const gyroY = point.gyroY || point.gyro_y || point['gyro y'] || point.gy || point.GyroY || 0;
+  const gyroZ = point.gyroZ || point.gyro_z || point['gyro z'] || point.gz || point.GyroZ || 0;
+  
+  return {
+    accel: [accelX, accelY, accelZ],
+    quaternion: { w: qw, x: qx, y: qy, z: qz },
+    gyro: [gyroX, gyroY, gyroZ]
+  };
+};
+
 export const calculateAerodynamicCoefficients = (
   data: IMUDataPoint[],
   bounds: FlightBounds,
   aircraftParams: AircraftParameters
 ): AerodynamicCoefficient[] => {
   console.log("Starting aerodynamic coefficient calculation");
+  console.log("Data length:", data.length);
+  console.log("Bounds:", bounds);
+  console.log("Aircraft params:", aircraftParams);
   
   // Extract stationary period data for calibration
   const stationaryData = data.slice(bounds.stationaryStart, bounds.stationaryEnd + 1);
   const flightData = data.slice(bounds.flightStart, bounds.flightEnd + 1);
+  
+  console.log("Stationary data length:", stationaryData.length);
+  console.log("Flight data length:", flightData.length);
   
   if (stationaryData.length === 0 || flightData.length === 0) {
     console.warn("Insufficient data for calculation");
     return [];
   }
   
+  // Log sample data to understand structure
+  if (stationaryData.length > 0) {
+    const sampleStationary = extractSensorData(stationaryData[0]);
+    console.log("Sample stationary sensor data:", sampleStationary);
+  }
+  
   // Calculate reference quaternion from stationary period
-  const stationaryQuaternions = stationaryData.map(point => ({
-    w: point.qw || 1,
-    x: point.qx || 0,
-    y: point.qy || 0,
-    z: point.qz || 0
-  }));
+  const stationaryQuaternions = stationaryData.map(point => {
+    const sensor = extractSensorData(point);
+    return sensor.quaternion;
+  });
   
   const q0 = averageQuaternion(stationaryQuaternions);
-  const R_b2e = quaternionToRotationMatrix(q0);
-  
   console.log("Reference quaternion calculated:", q0);
+  
+  // Calculate average acceleration during stationary period for gravity reference
+  const stationaryAccels = stationaryData.map(point => extractSensorData(point).accel);
+  const avgStationaryAccel = [
+    stationaryAccels.reduce((sum, a) => sum + a[0], 0) / stationaryAccels.length,
+    stationaryAccels.reduce((sum, a) => sum + a[1], 0) / stationaryAccels.length,
+    stationaryAccels.reduce((sum, a) => sum + a[2], 0) / stationaryAccels.length
+  ];
+  
+  console.log("Average stationary acceleration (gravity reference):", avgStationaryAccel);
+  const gravityMagnitude = vectorMagnitude(avgStationaryAccel);
+  console.log("Gravity magnitude:", gravityMagnitude);
   
   // Process flight data
   const coefficients: AerodynamicCoefficient[] = [];
@@ -153,34 +201,35 @@ export const calculateAerodynamicCoefficients = (
     const point = flightData[i];
     const prevPoint = i > 0 ? flightData[i - 1] : point;
     
-    // Get current quaternion and create rotation matrix
-    const qi = {
-      w: point.qw || 1,
-      x: point.qx || 0,
-      y: point.qy || 0,
-      z: point.qz || 0
-    };
+    const sensor = extractSensorData(point);
     
-    const R_qi = quaternionToRotationMatrix(qi);
-    const Ri = multiplyMatrices(R_b2e, R_qi);
+    // Create rotation matrix from body to earth frame
+    const R_b2e = quaternionToRotationMatrix(sensor.quaternion);
     
     // Transform acceleration to earth frame
-    const accel_body = [point.accelX || 0, point.accelY || 0, point.accelZ || 0];
-    const accel_earth = transformVector(Ri, accel_body);
+    const accel_earth = transformVector(R_b2e, sensor.accel);
     
-    // Time step
-    const dt = i > 0 ? (point.timestamp - prevPoint.timestamp) / 1000 : 0.01;
+    // Subtract gravity (assume gravity is in -Z direction in earth frame)
+    accel_earth[2] -= gravityMagnitude;
     
-    // Integrate velocity (simple Euler integration with drift suppression)
+    // Time step calculation
+    const dt = i > 0 ? Math.max(0.001, (point.timestamp - prevPoint.timestamp) / 1000) : 0.01;
+    
+    // Integrate velocity using trapezoidal method
     if (i > 0) {
-      velocity[0] += accel_earth[0] * dt;
-      velocity[1] += accel_earth[1] * dt;
-      velocity[2] += accel_earth[2] * dt;
+      const prevSensor = extractSensorData(prevPoint);
+      const prevAccel_earth = transformVector(quaternionToRotationMatrix(prevSensor.quaternion), prevSensor.accel);
+      prevAccel_earth[2] -= gravityMagnitude;
       
-      // Simple drift suppression - gradually reduce velocity towards zero when acceleration is low
+      // Trapezoidal integration
+      velocity[0] += 0.5 * (accel_earth[0] + prevAccel_earth[0]) * dt;
+      velocity[1] += 0.5 * (accel_earth[1] + prevAccel_earth[1]) * dt;
+      velocity[2] += 0.5 * (accel_earth[2] + prevAccel_earth[2]) * dt;
+      
+      // Velocity drift compensation - gradually decay velocity when acceleration is low
       const accelMag = vectorMagnitude(accel_earth);
-      if (accelMag < 0.5) { // Low acceleration threshold
-        const driftFactor = 0.99; // Reduce velocity by 1% each step during low acceleration
+      if (accelMag < 1.0) { // Low acceleration threshold
+        const driftFactor = Math.exp(-dt / 10.0); // 10 second time constant
         velocity[0] *= driftFactor;
         velocity[1] *= driftFactor;
         velocity[2] *= driftFactor;
@@ -189,49 +238,42 @@ export const calculateAerodynamicCoefficients = (
     
     const speed = vectorMagnitude(velocity);
     
-    // Skip if speed is too low
-    if (speed < 0.1) {
-      coefficients.push({
-        timestamp: point.timestamp,
-        CL: 0,
-        CD: 0,
-        velocity: speed,
-        dynamicPressure: 0
-      });
-      continue;
-    }
-    
-    // Aerodynamic force = mass * acceleration
-    const F_aero = [
-      aircraftParams.aircraftWeight * accel_earth[0],
-      aircraftParams.aircraftWeight * accel_earth[1],
-      aircraftParams.aircraftWeight * accel_earth[2]
-    ];
-    
-    // Velocity unit vector
-    const v_hat = normalizeVector(velocity);
-    
-    // Drag vector (opposite to velocity direction)
-    const dragMagnitude = dotProduct(F_aero, v_hat);
-    const drag = [
-      -dragMagnitude * v_hat[0],
-      -dragMagnitude * v_hat[1],
-      -dragMagnitude * v_hat[2]
-    ];
-    
-    // Lift vector (perpendicular to velocity)
-    const lift = [
-      F_aero[0] - drag[0],
-      F_aero[1] - drag[1],
-      F_aero[2] - drag[2]
-    ];
-    
-    // Dynamic pressure
+    // Calculate dynamic pressure
     const q_dyn = 0.5 * aircraftParams.airDensity * speed * speed;
     
-    // Coefficients
-    const CL = q_dyn > 0 ? vectorMagnitude(lift) / (q_dyn * aircraftParams.wingSurfaceArea) : 0;
-    const CD = q_dyn > 0 ? Math.abs(dragMagnitude) / (q_dyn * aircraftParams.wingSurfaceArea) : 0;
+    let CL = 0;
+    let CD = 0;
+    
+    // Only calculate coefficients if we have reasonable speed and dynamic pressure
+    if (speed > 1.0 && q_dyn > 0.01) {
+      // Calculate aerodynamic force (F = ma, but we need to account for weight)
+      const weightForce = [0, 0, -aircraftParams.aircraftWeight * gravityMagnitude];
+      const totalForce = [
+        aircraftParams.aircraftWeight * accel_earth[0],
+        aircraftParams.aircraftWeight * accel_earth[1],
+        aircraftParams.aircraftWeight * accel_earth[2] + weightForce[2]
+      ];
+      
+      // Velocity unit vector
+      const v_hat = normalizeVector(velocity);
+      
+      // Drag force (component of total force in direction opposite to velocity)
+      const dragMagnitude = -dotProduct(totalForce, v_hat); // Negative because drag opposes motion
+      
+      // Lift force (perpendicular to velocity)
+      const liftForce = [
+        totalForce[0] + dragMagnitude * v_hat[0],
+        totalForce[1] + dragMagnitude * v_hat[1],
+        totalForce[2] + dragMagnitude * v_hat[2]
+      ];
+      
+      const liftMagnitude = vectorMagnitude(liftForce);
+      
+      // Calculate coefficients
+      const denominator = q_dyn * aircraftParams.wingSurfaceArea;
+      CL = liftMagnitude / denominator;
+      CD = Math.abs(dragMagnitude) / denominator;
+    }
     
     coefficients.push({
       timestamp: point.timestamp,
@@ -240,19 +282,31 @@ export const calculateAerodynamicCoefficients = (
       velocity: speed,
       dynamicPressure: q_dyn
     });
+    
+    // Log progress every 100 points
+    if (i % 100 === 0) {
+      console.log(`Processing point ${i}/${flightData.length}, Speed: ${speed.toFixed(2)}, CL: ${CL.toFixed(4)}, CD: ${CD.toFixed(4)}`);
+    }
   }
+  
+  console.log("Raw coefficients calculated, applying filter...");
   
   // Apply Butterworth filter to smooth coefficients
   const CLValues = coefficients.map(c => c.CL);
   const CDValues = coefficients.map(c => c.CD);
   
-  const filteredCL = butterworthFilter(CLValues);
-  const filteredCD = butterworthFilter(CDValues);
+  const filteredCL = butterworthFilter(CLValues, 1.0, 100); // Lower cutoff for smoother results
+  const filteredCD = butterworthFilter(CDValues, 1.0, 100);
   
   // Return filtered coefficients
-  return coefficients.map((coeff, index) => ({
+  const finalCoefficients = coefficients.map((coeff, index) => ({
     ...coeff,
     CL: filteredCL[index],
     CD: filteredCD[index]
   }));
+  
+  console.log("Coefficient calculation complete");
+  console.log("Sample final coefficients:", finalCoefficients.slice(0, 5));
+  
+  return finalCoefficients;
 };
