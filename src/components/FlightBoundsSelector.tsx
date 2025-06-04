@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { FlightBounds, RawData } from "@/types";
-import { Plane, ZoomIn } from "lucide-react";
+import { Plane } from "lucide-react";
 
 interface FlightBoundsSelectorProps {
   data: RawData;
@@ -14,8 +14,6 @@ interface FlightBoundsSelectorProps {
 }
 
 const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBoundsSet }) => {
-  const [zoomStart, setZoomStart] = useState(0);
-  const [zoomEnd, setZoomEnd] = useState(100);
   const [flightStart, setFlightStart] = useState(10);
   const [flightEnd, setFlightEnd] = useState(90);
   const [stationaryStart, setStationaryStart] = useState(0);
@@ -38,63 +36,47 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
     });
   }, [data]);
 
-  // Get zoomed data based on percentage sliders
-  const zoomedData = useMemo(() => {
-    const startIdx = Math.floor((zoomStart / 100) * chartData.length);
-    const endIdx = Math.floor((zoomEnd / 100) * chartData.length);
-    return chartData.slice(startIdx, endIdx);
-  }, [chartData, zoomStart, zoomEnd]);
-
   // Convert percentage positions to actual data indices
   const getActualIndex = (percentage: number) => {
     return Math.floor((percentage / 100) * chartData.length);
   };
 
-  // Convert zoomed data position to global percentage
-  const convertZoomedToGlobal = (zoomedPercentage: number) => {
-    const zoomedRange = zoomEnd - zoomStart;
-    return zoomStart + (zoomedRange * zoomedPercentage / 100);
-  };
-
-  // Get reference line positions relative to zoomed data
-  const getZoomedReferencePosition = (globalPercentage: number) => {
-    if (globalPercentage < zoomStart || globalPercentage > zoomEnd) return null;
-    const zoomedRange = zoomEnd - zoomStart;
-    const relativePosition = (globalPercentage - zoomStart) / zoomedRange;
-    return relativePosition * zoomedData.length;
+  // Get reference line positions based on percentage
+  const getReferencePosition = (percentage: number) => {
+    const index = Math.floor((percentage / 100) * chartData.length);
+    return chartData[index]?.displayTime;
   };
 
   const handleChartClick = (event: any) => {
     if (!event || !event.activeLabel) return;
     
-    const clickedIndex = zoomedData.findIndex(d => d.displayTime === event.activeLabel);
+    const clickedIndex = chartData.findIndex(d => d.displayTime === event.activeLabel);
     if (clickedIndex === -1) return;
     
-    const clickedPercentage = (clickedIndex / zoomedData.length) * 100;
-    const globalPercentage = convertZoomedToGlobal(clickedPercentage);
+    const clickedPercentage = (clickedIndex / chartData.length) * 100;
     
     // Determine which slider to move based on proximity
     const distances = [
-      { slider: 'stationaryStart', distance: Math.abs(globalPercentage - stationaryStart) },
-      { slider: 'stationaryEnd', distance: Math.abs(globalPercentage - stationaryEnd) },
-      { slider: 'flightStart', distance: Math.abs(globalPercentage - flightStart) },
-      { slider: 'flightEnd', distance: Math.abs(globalPercentage - flightEnd) }
+      { slider: 'stationaryStart', distance: Math.abs(clickedPercentage - stationaryStart) },
+      { slider: 'stationaryEnd', distance: Math.abs(clickedPercentage - stationaryEnd) },
+      { slider: 'flightStart', distance: Math.abs(clickedPercentage - flightStart) },
+      { slider: 'flightEnd', distance: Math.abs(clickedPercentage - flightEnd) }
     ];
     
     const closest = distances.reduce((min, curr) => curr.distance < min.distance ? curr : min);
     
     switch (closest.slider) {
       case 'stationaryStart':
-        setStationaryStart(globalPercentage);
+        setStationaryStart(clickedPercentage);
         break;
       case 'stationaryEnd':
-        setStationaryEnd(globalPercentage);
+        setStationaryEnd(clickedPercentage);
         break;
       case 'flightStart':
-        setFlightStart(globalPercentage);
+        setFlightStart(clickedPercentage);
         break;
       case 'flightEnd':
-        setFlightEnd(globalPercentage);
+        setFlightEnd(clickedPercentage);
         break;
     }
   };
@@ -113,44 +95,13 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <ZoomIn className="mr-2" />
-            Zoom Controls
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label>Zoom Start (%): {zoomStart}</Label>
-            <Slider
-              value={[zoomStart]}
-              onValueChange={(value) => setZoomStart(value[0])}
-              max={100}
-              step={1}
-              className="mt-2"
-            />
-          </div>
-          <div>
-            <Label>Zoom End (%): {zoomEnd}</Label>
-            <Slider
-              value={[zoomEnd]}
-              onValueChange={(value) => setZoomEnd(value[0])}
-              max={100}
-              step={1}
-              className="mt-2"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Acceleration Magnitude vs Time</CardTitle>
           <p className="text-sm text-gray-600">Click on the chart to move the nearest slider</p>
         </CardHeader>
         <CardContent>
-          <div className="h-64">
+          <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={zoomedData} onClick={handleChartClick}>
+              <LineChart data={chartData} onClick={handleChartClick}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="displayTime" 
@@ -170,38 +121,30 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
                   dot={false}
                   strokeWidth={2}
                 />
-                {getZoomedReferencePosition(flightStart) !== null && (
-                  <ReferenceLine 
-                    x={zoomedData[Math.floor(getZoomedReferencePosition(flightStart)!)]?.displayTime} 
-                    stroke="green" 
-                    strokeDasharray="5 5" 
-                    label="Flight Start" 
-                  />
-                )}
-                {getZoomedReferencePosition(flightEnd) !== null && (
-                  <ReferenceLine 
-                    x={zoomedData[Math.floor(getZoomedReferencePosition(flightEnd)!)]?.displayTime} 
-                    stroke="red" 
-                    strokeDasharray="5 5" 
-                    label="Flight End" 
-                  />
-                )}
-                {getZoomedReferencePosition(stationaryStart) !== null && (
-                  <ReferenceLine 
-                    x={zoomedData[Math.floor(getZoomedReferencePosition(stationaryStart)!)]?.displayTime} 
-                    stroke="blue" 
-                    strokeDasharray="5 5" 
-                    label="Stationary Start" 
-                  />
-                )}
-                {getZoomedReferencePosition(stationaryEnd) !== null && (
-                  <ReferenceLine 
-                    x={zoomedData[Math.floor(getZoomedReferencePosition(stationaryEnd)!)]?.displayTime} 
-                    stroke="purple" 
-                    strokeDasharray="5 5" 
-                    label="Stationary End" 
-                  />
-                )}
+                <ReferenceLine 
+                  x={getReferencePosition(flightStart)} 
+                  stroke="green" 
+                  strokeDasharray="5 5" 
+                  label="Flight Start" 
+                />
+                <ReferenceLine 
+                  x={getReferencePosition(flightEnd)} 
+                  stroke="red" 
+                  strokeDasharray="5 5" 
+                  label="Flight End" 
+                />
+                <ReferenceLine 
+                  x={getReferencePosition(stationaryStart)} 
+                  stroke="blue" 
+                  strokeDasharray="5 5" 
+                  label="Stationary Start" 
+                />
+                <ReferenceLine 
+                  x={getReferencePosition(stationaryEnd)} 
+                  stroke="purple" 
+                  strokeDasharray="5 5" 
+                  label="Stationary End" 
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
