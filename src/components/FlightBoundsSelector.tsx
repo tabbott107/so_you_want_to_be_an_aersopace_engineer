@@ -50,6 +50,55 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
     return Math.floor((percentage / 100) * chartData.length);
   };
 
+  // Convert zoomed data position to global percentage
+  const convertZoomedToGlobal = (zoomedPercentage: number) => {
+    const zoomedRange = zoomEnd - zoomStart;
+    return zoomStart + (zoomedRange * zoomedPercentage / 100);
+  };
+
+  // Get reference line positions relative to zoomed data
+  const getZoomedReferencePosition = (globalPercentage: number) => {
+    if (globalPercentage < zoomStart || globalPercentage > zoomEnd) return null;
+    const zoomedRange = zoomEnd - zoomStart;
+    const relativePosition = (globalPercentage - zoomStart) / zoomedRange;
+    return relativePosition * zoomedData.length;
+  };
+
+  const handleChartClick = (event: any) => {
+    if (!event || !event.activeLabel) return;
+    
+    const clickedIndex = zoomedData.findIndex(d => d.displayTime === event.activeLabel);
+    if (clickedIndex === -1) return;
+    
+    const clickedPercentage = (clickedIndex / zoomedData.length) * 100;
+    const globalPercentage = convertZoomedToGlobal(clickedPercentage);
+    
+    // Determine which slider to move based on proximity
+    const distances = [
+      { slider: 'stationaryStart', distance: Math.abs(globalPercentage - stationaryStart) },
+      { slider: 'stationaryEnd', distance: Math.abs(globalPercentage - stationaryEnd) },
+      { slider: 'flightStart', distance: Math.abs(globalPercentage - flightStart) },
+      { slider: 'flightEnd', distance: Math.abs(globalPercentage - flightEnd) }
+    ];
+    
+    const closest = distances.reduce((min, curr) => curr.distance < min.distance ? curr : min);
+    
+    switch (closest.slider) {
+      case 'stationaryStart':
+        setStationaryStart(globalPercentage);
+        break;
+      case 'stationaryEnd':
+        setStationaryEnd(globalPercentage);
+        break;
+      case 'flightStart':
+        setFlightStart(globalPercentage);
+        break;
+      case 'flightEnd':
+        setFlightEnd(globalPercentage);
+        break;
+    }
+  };
+
   const handleSetBounds = () => {
     const bounds: FlightBounds = {
       flightStart: getActualIndex(flightStart),
@@ -96,11 +145,12 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
       <Card>
         <CardHeader>
           <CardTitle>Acceleration Magnitude vs Time</CardTitle>
+          <p className="text-sm text-gray-600">Click on the chart to move the nearest slider</p>
         </CardHeader>
         <CardContent>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={zoomedData}>
+              <LineChart data={zoomedData} onClick={handleChartClick}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="displayTime" 
@@ -120,10 +170,38 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
                   dot={false}
                   strokeWidth={2}
                 />
-                <ReferenceLine x={flightStart} stroke="green" strokeDasharray="5 5" label="Flight Start" />
-                <ReferenceLine x={flightEnd} stroke="red" strokeDasharray="5 5" label="Flight End" />
-                <ReferenceLine x={stationaryStart} stroke="blue" strokeDasharray="5 5" label="Stationary Start" />
-                <ReferenceLine x={stationaryEnd} stroke="purple" strokeDasharray="5 5" label="Stationary End" />
+                {getZoomedReferencePosition(flightStart) !== null && (
+                  <ReferenceLine 
+                    x={zoomedData[Math.floor(getZoomedReferencePosition(flightStart)!)]?.displayTime} 
+                    stroke="green" 
+                    strokeDasharray="5 5" 
+                    label="Flight Start" 
+                  />
+                )}
+                {getZoomedReferencePosition(flightEnd) !== null && (
+                  <ReferenceLine 
+                    x={zoomedData[Math.floor(getZoomedReferencePosition(flightEnd)!)]?.displayTime} 
+                    stroke="red" 
+                    strokeDasharray="5 5" 
+                    label="Flight End" 
+                  />
+                )}
+                {getZoomedReferencePosition(stationaryStart) !== null && (
+                  <ReferenceLine 
+                    x={zoomedData[Math.floor(getZoomedReferencePosition(stationaryStart)!)]?.displayTime} 
+                    stroke="blue" 
+                    strokeDasharray="5 5" 
+                    label="Stationary Start" 
+                  />
+                )}
+                {getZoomedReferencePosition(stationaryEnd) !== null && (
+                  <ReferenceLine 
+                    x={zoomedData[Math.floor(getZoomedReferencePosition(stationaryEnd)!)]?.displayTime} 
+                    stroke="purple" 
+                    strokeDasharray="5 5" 
+                    label="Stationary End" 
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -142,7 +220,7 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
             <div className="space-y-4">
               <h4 className="font-medium text-green-700">Flight Period</h4>
               <div>
-                <Label>Flight Start (%): {flightStart}</Label>
+                <Label>Flight Start (%): {flightStart.toFixed(1)}</Label>
                 <Slider
                   value={[flightStart]}
                   onValueChange={(value) => setFlightStart(value[0])}
@@ -152,7 +230,7 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
                 />
               </div>
               <div>
-                <Label>Flight End (%): {flightEnd}</Label>
+                <Label>Flight End (%): {flightEnd.toFixed(1)}</Label>
                 <Slider
                   value={[flightEnd]}
                   onValueChange={(value) => setFlightEnd(value[0])}
@@ -166,7 +244,7 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
             <div className="space-y-4">
               <h4 className="font-medium text-blue-700">Stationary Period (for IMU calibration)</h4>
               <div>
-                <Label>Stationary Start (%): {stationaryStart}</Label>
+                <Label>Stationary Start (%): {stationaryStart.toFixed(1)}</Label>
                 <Slider
                   value={[stationaryStart]}
                   onValueChange={(value) => setStationaryStart(value[0])}
@@ -176,7 +254,7 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({ data, onBou
                 />
               </div>
               <div>
-                <Label>Stationary End (%): {stationaryEnd}</Label>
+                <Label>Stationary End (%): {stationaryEnd.toFixed(1)}</Label>
                 <Slider
                   value={[stationaryEnd]}
                   onValueChange={(value) => setStationaryEnd(value[0])}

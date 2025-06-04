@@ -29,6 +29,7 @@ export interface ProcessingOptions {
   integrationMethod: 'euler' | 'rk4';
   gravityCompensation: boolean;
   calculateFromGyro?: boolean;
+  filterCutoff?: number;
 }
 
 export interface AircraftParameters {
