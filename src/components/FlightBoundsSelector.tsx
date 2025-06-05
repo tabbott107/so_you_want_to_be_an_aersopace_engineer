@@ -25,30 +25,53 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
 
   // Calculate total time duration from data
   const totalDuration = data.data.length > 0 ? 
-    (data.data[data.data.length - 1].timestamp - data.data[0].timestamp) / 1000 : 0;
+    (data.data[data.data.length - 1].timestamp - data.data[0].timestamp) : 0;
+
+  console.log("Flight bounds - Total duration:", totalDuration);
+  console.log("First timestamp:", data.data[0]?.timestamp);
+  console.log("Last timestamp:", data.data[data.data.length - 1]?.timestamp);
 
   const handleSetBounds = () => {
     if (startTime >= endTime) {
       alert("Start time must be less than end time");
       return;
     }
+
+    // Convert time inputs to data indices based on the actual timestamps
+    const firstTimestamp = data.data[0].timestamp;
+    const lastTimestamp = data.data[data.data.length - 1].timestamp;
     
-    if (startTime < 0 || endTime > totalDuration) {
-      alert(`Times must be between 0 and ${totalDuration.toFixed(2)} seconds`);
-      return;
+    // Find the closest data points to the specified times
+    const targetStartTime = firstTimestamp + startTime;
+    const targetEndTime = firstTimestamp + endTime;
+    
+    let startIndex = 0;
+    let endIndex = data.data.length - 1;
+    
+    // Find start index
+    for (let i = 0; i < data.data.length; i++) {
+      if (data.data[i].timestamp >= targetStartTime) {
+        startIndex = i;
+        break;
+      }
+    }
+    
+    // Find end index
+    for (let i = data.data.length - 1; i >= 0; i--) {
+      if (data.data[i].timestamp <= targetEndTime) {
+        endIndex = i;
+        break;
+      }
     }
 
-    // Convert time inputs to data indices
-    const startPercentage = (startTime / totalDuration) * 100;
-    const endPercentage = (endTime / totalDuration) * 100;
-    
     const bounds: FlightBounds = {
-      flightStart: Math.floor((startPercentage / 100) * data.data.length),
-      flightEnd: Math.floor((endPercentage / 100) * data.data.length),
+      flightStart: startIndex,
+      flightEnd: endIndex,
       stationaryStart: 0,
       stationaryEnd: 0
     };
 
+    console.log("Setting bounds:", bounds);
     onBoundsSet(bounds);
   };
 
@@ -68,10 +91,9 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
               id="start-time"
               type="number"
               step="0.1"
-              min="0"
-              max={totalDuration}
               value={startTime}
               onChange={(e) => setStartTime(parseFloat(e.target.value) || 0)}
+              placeholder="Enter start time"
             />
           </div>
           <div className="space-y-2">
@@ -80,16 +102,17 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
               id="end-time"
               type="number"
               step="0.1"
-              min="0"
-              max={totalDuration}
               value={endTime}
               onChange={(e) => setEndTime(parseFloat(e.target.value) || 0)}
+              placeholder="Enter end time"
             />
           </div>
         </div>
         
         <div className="text-sm text-gray-600">
           Total flight duration: {totalDuration.toFixed(2)} seconds
+          <br />
+          Data points: {data.data.length}
         </div>
         
         <Button onClick={handleSetBounds} className="w-full">
