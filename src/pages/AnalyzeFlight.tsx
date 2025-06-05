@@ -31,17 +31,20 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
 
   // Calculate total time duration from data
   const totalDuration = data.data.length > 0 ? 
-    (data.data[data.data.length - 1].timestamp - data.data[0].timestamp) / 1000 : 0;
+    (data.data[data.data.length - 1].timestamp - data.data[0].timestamp) : 0;
 
   useEffect(() => {
-    // Initialize time inputs based on bounds
-    const startSeconds = (bounds.flightStart / data.data.length) * totalDuration;
-    const endSeconds = (bounds.flightEnd / data.data.length) * totalDuration;
-    setStartTime(startSeconds);
-    setEndTime(endSeconds);
+    // Initialize time inputs based on the actual bounds passed from previous section
+    if (initialBounds && data.data.length > 0) {
+      const firstTimestamp = data.data[0].timestamp;
+      const startSeconds = (data.data[initialBounds.flightStart].timestamp - firstTimestamp);
+      const endSeconds = (data.data[initialBounds.flightEnd].timestamp - firstTimestamp);
+      setStartTime(startSeconds);
+      setEndTime(endSeconds);
+    }
     
     calculateCoefficients();
-  }, [data, bounds, aircraftParams]);
+  }, [data, initialBounds, aircraftParams]);
 
   const calculateCoefficients = async () => {
     setIsCalculating(true);
@@ -63,19 +66,34 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
       toast.error("Start time must be less than end time");
       return;
     }
+
+    // Convert time inputs to data indices based on the actual timestamps
+    const firstTimestamp = data.data[0].timestamp;
+    const targetStartTime = firstTimestamp + startTime;
+    const targetEndTime = firstTimestamp + endTime;
     
-    if (startTime < 0 || endTime > totalDuration) {
-      toast.error(`Times must be between 0 and ${totalDuration.toFixed(2)} seconds`);
-      return;
+    let startIndex = 0;
+    let endIndex = data.data.length - 1;
+    
+    // Find start index
+    for (let i = 0; i < data.data.length; i++) {
+      if (data.data[i].timestamp >= targetStartTime) {
+        startIndex = i;
+        break;
+      }
+    }
+    
+    // Find end index
+    for (let i = data.data.length - 1; i >= 0; i--) {
+      if (data.data[i].timestamp <= targetEndTime) {
+        endIndex = i;
+        break;
+      }
     }
 
-    // Convert time inputs to data indices
-    const startPercentage = (startTime / totalDuration) * 100;
-    const endPercentage = (endTime / totalDuration) * 100;
-    
     const newBounds: FlightBounds = {
-      flightStart: Math.floor((startPercentage / 100) * data.data.length),
-      flightEnd: Math.floor((endPercentage / 100) * data.data.length),
+      flightStart: startIndex,
+      flightEnd: endIndex,
       stationaryStart: bounds.stationaryStart,
       stationaryEnd: bounds.stationaryEnd
     };
@@ -84,34 +102,29 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
     toast.success("Flight bounds updated");
   };
 
-  // Prepare chart data
-  const chartData = coefficients.map((coeff, index) => ({
-    index,
-    time: ((coeff.timestamp - coefficients[0]?.timestamp || 0) / 1000).toFixed(2),
-    CL: Number(coeff.CL.toFixed(4)),
-    CD: Number(coeff.CD.toFixed(4)),
-    velocity: Number(coeff.velocity.toFixed(2)),
-    dynamicPressure: Number(coeff.dynamicPressure.toFixed(2))
-  }));
+  // Calculate average coefficients using time-based filtering (like Python algorithm)
+  const timeBasedCoefficients = coefficients.filter(coeff => {
+    const relativeTime = (coeff.timestamp - coefficients[0]?.timestamp || 0);
+    return relativeTime >= startTime && relativeTime <= endTime;
+  });
 
-  // Calculate average coefficients
-  const avgCL = coefficients.length > 0 ? 
-    coefficients.reduce((sum, c) => sum + c.CL, 0) / coefficients.length : 0;
-  const avgCD = coefficients.length > 0 ? 
-    coefficients.reduce((sum, c) => sum + c.CD, 0) / coefficients.length : 0;
+  const avgCL = timeBasedCoefficients.length > 0 ? 
+    timeBasedCoefficients.reduce((sum, c) => sum + c.CL, 0) / timeBasedCoefficients.length : 0;
+  const avgCD = timeBasedCoefficients.length > 0 ? 
+    timeBasedCoefficients.reduce((sum, c) => sum + c.CD, 0) / timeBasedCoefficients.length : 0;
   
   const liftToDragRatio = avgCD > 0 ? avgCL / avgCD : 0;
 
   // Prepare acceleration data for the flight period
   const flightData = data.data.slice(bounds.flightStart, bounds.flightEnd + 1);
   const accelChartData = flightData.map((point, index) => {
-    const accelX = point['linear_accel_x'] || point['Linear Accel X'] || 0;
-    const accelY = point['linear_accel_y'] || point['Linear Accel Y'] || 0;
-    const accelZ = point['linear_accel_z'] || point['Linear Accel Z'] || 0;
+    const accelX = point['Linear Accel X'] || point['linear_accel_x'] || 0;
+    const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || 0;
+    const accelZ = point['Linear Accel Z'] || point['linear_accel_z'] || 0;
     
     return {
       index,
-      time: ((point.timestamp - flightData[0].timestamp) / 1000).toFixed(2),
+      time: ((point.timestamp - flightData[0].timestamp)).toFixed(2),
       accelX: Number(accelX.toFixed(4)),
       accelY: Number(accelY.toFixed(4)),
       accelZ: Number(accelZ.toFixed(4))
@@ -121,7 +134,10 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   const downloadResults = () => {
     const csvContent = [
       "Time(s),CL,CD,Velocity(m/s),DynamicPressure(Pa)",
-      ...chartData.map(row => `${row.time},${row.CL},${row.CD},${row.velocity},${row.dynamicPressure}`)
+      ...timeBasedCoefficients.map(coeff => {
+        const relativeTime = (coeff.timestamp - coefficients[0]?.timestamp || 0);
+        return `${relativeTime.toFixed(2)},${coeff.CL.toFixed(4)},${coeff.CD.toFixed(4)},${coeff.velocity.toFixed(2)},${coeff.dynamicPressure.toFixed(2)}`;
+      })
     ].join("\n");
     
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -271,10 +287,9 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                     id="start-time"
                     type="number"
                     step="0.1"
-                    min="0"
-                    max={totalDuration}
                     value={startTime}
                     onChange={(e) => setStartTime(parseFloat(e.target.value) || 0)}
+                    placeholder="Enter start time"
                   />
                 </div>
                 <div className="space-y-2">
@@ -283,16 +298,17 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                     id="end-time"
                     type="number"
                     step="0.1"
-                    min="0"
-                    max={totalDuration}
                     value={endTime}
                     onChange={(e) => setEndTime(parseFloat(e.target.value) || 0)}
+                    placeholder="Enter end time"
                   />
                 </div>
               </div>
               
               <div className="text-sm text-gray-600">
                 Current flight duration: {((endTime - startTime)).toFixed(2)} seconds
+                <br />
+                Data points in bounds: {timeBasedCoefficients.length}
               </div>
               
               <Button onClick={handleUpdateBounds} className="w-full">
