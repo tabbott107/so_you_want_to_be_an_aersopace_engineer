@@ -4,8 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { RawData, ProcessedData, IMUDataPoint, ProcessedDataPoint } from "@/types";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
+import { RawData, ProcessedData } from "@/types";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Brush } from "recharts";
 import { Compass, Gauge, Rocket } from "lucide-react";
 
 // Color palette for aerospace theme
@@ -20,21 +20,9 @@ const CHART_COLORS = [
 
 interface DataVisualizerProps {
   data: RawData | ProcessedData;
-  flightStart?: number;
-  flightEnd?: number;
-  stationaryStart?: number;
-  stationaryEnd?: number;
-  onChartClick?: (event: any) => void;
 }
 
-const DataVisualizer: React.FC<DataVisualizerProps> = ({ 
-  data, 
-  flightStart = 10, 
-  flightEnd = 90, 
-  stationaryStart = 0, 
-  stationaryEnd = 8,
-  onChartClick 
-}) => {
+const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
   // Check if we're working with processed data
   const isProcessedData = 'processedData' in data;
   
@@ -48,30 +36,45 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [availableColumns, setAvailableColumns] = useState<{name: string, key: string, color: string}[]>([]);
   
-  // Initialize available columns
+  // Initialize available columns and set default selection
   useEffect(() => {
     if (rawData.headers && Array.isArray(rawData.headers)) {
+      let columns: {name: string, key: string, color: string}[] = [];
+      
       // If headers is an array of objects with 'original' property
       if (typeof rawData.headers[0] === 'object' && 'original' in rawData.headers[0]) {
-        const columns = (rawData.headers as {original: string, display: string}[])
+        columns = (rawData.headers as {original: string, display: string}[])
           .filter((header, index) => index !== rawData.timeColumnIndex)
           .map((header, index) => ({
             name: header.display,
             key: header.original.replace(/\s+/g, '_').toLowerCase(),
             color: CHART_COLORS[index % CHART_COLORS.length]
           }));
-        setAvailableColumns(columns);
       } 
       // If headers is a simple array of strings
       else {
-        const columns = (rawData.headers as string[])
+        columns = (rawData.headers as string[])
           .filter((_, index) => index !== 0) // Assuming first column is time
           .map((header, index) => ({
             name: header,
             key: header.replace(/\s+/g, '_').toLowerCase(),
             color: CHART_COLORS[index % CHART_COLORS.length]
           }));
-        setAvailableColumns(columns);
+      }
+      
+      setAvailableColumns(columns);
+      
+      // Set default selection to Linear Accel X, Y, Z
+      const defaultColumns = ['linear_accel_x', 'linear_accel_y', 'linear_accel_z'];
+      const availableDefaults = defaultColumns.filter(col => 
+        columns.some(c => c.key === col)
+      );
+      
+      if (availableDefaults.length > 0) {
+        setSelectedColumns(availableDefaults);
+      } else {
+        // Fallback to first 3 columns if Linear Accel columns not found
+        setSelectedColumns(columns.slice(0, 3).map(c => c.key));
       }
     }
   }, [rawData]);
@@ -89,12 +92,6 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({
       ? ((point.timestamp - chartData[0].timestamp) / 1000).toFixed(2)
       : (point.timestamp - chartData[0].timestamp).toFixed(2)
   }));
-
-  // Get reference line positions based on percentage
-  const getReferencePosition = (percentage: number) => {
-    const index = Math.floor((percentage / 100) * formattedData.length);
-    return formattedData[index]?.displayTime;
-  };
 
   const handleColumnToggle = (column: string) => {
     setSelectedColumns(prev => 
@@ -135,12 +132,12 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({
         <Card className="p-4 md:w-3/4">
           <h3 className="text-lg font-medium mb-4 flex items-center">
             <Gauge className="mr-2" /> Time Series Data
-            {onChartClick && <span className="text-sm text-gray-600 ml-4">Click on the chart to move the nearest boundary</span>}
+            <span className="text-sm text-gray-600 ml-4">Use the brush below to zoom in on sections</span>
           </h3>
-          <div className="h-64 md:h-[350px]">
+          <div className="h-64 md:h-[400px]">
             {selectedColumns.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={formattedData} onClick={onChartClick}>
+                <LineChart data={formattedData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="displayTime" 
@@ -167,37 +164,11 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({
                         stroke={colInfo?.color || CHART_COLORS[index % CHART_COLORS.length]} 
                         name={colInfo?.name || column} 
                         dot={false} 
+                        strokeWidth={2}
                       />
                     );
                   })}
-                  {onChartClick && (
-                    <>
-                      <ReferenceLine 
-                        x={getReferencePosition(flightStart)} 
-                        stroke="green" 
-                        strokeDasharray="5 5" 
-                        label="Flight Start" 
-                      />
-                      <ReferenceLine 
-                        x={getReferencePosition(flightEnd)} 
-                        stroke="red" 
-                        strokeDasharray="5 5" 
-                        label="Flight End" 
-                      />
-                      <ReferenceLine 
-                        x={getReferencePosition(stationaryStart)} 
-                        stroke="blue" 
-                        strokeDasharray="5 5" 
-                        label="Stationary Start" 
-                      />
-                      <ReferenceLine 
-                        x={getReferencePosition(stationaryEnd)} 
-                        stroke="purple" 
-                        strokeDasharray="5 5" 
-                        label="Stationary End" 
-                      />
-                    </>
-                  )}
+                  <Brush dataKey="displayTime" height={30} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
