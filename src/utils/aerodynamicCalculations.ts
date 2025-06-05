@@ -1,15 +1,5 @@
 
-import { IMUDataPoint, AerodynamicCoefficient, FlightBounds, AircraftParameters } from "@/types";
-
-// Helper function to extract sensor data from IMU point
-const extractSensorData = (point: IMUDataPoint) => {
-  // Try to find Linear Acceleration data - look for common column names
-  const accelX = point['Linear Accel X'] || point['linear_accel_x'] || point.accelX || point.accel_x || point['accel x'] || point.ax || point.AccelX || 0;
-  const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || point.accelY || point.accel_y || point['accel y'] || point.ay || point.AccelY || 0;
-  const accelZ = point['Linear Accel Z'] || point['linear_accel_z'] || point.accelZ || point.accel_z || point['accel z'] || point.az || point.AccelZ || 0;
-  
-  return [accelX, accelY, accelZ];
-};
+import { IMUDataPoint, AerodynamicCoefficient, AircraftParameters } from "@/types";
 
 export const calculateAerodynamicCoefficients = (
   data: IMUDataPoint[],
@@ -17,11 +7,11 @@ export const calculateAerodynamicCoefficients = (
   endTime: number,
   aircraftParams: AircraftParameters
 ): AerodynamicCoefficient[] => {
-  console.log("Starting aerodynamic coefficient calculation following exact Python algorithm");
+  console.log("Starting new aerodynamic coefficient calculation using pressure-based algorithm");
   console.log("Start time:", startTime, "End time:", endTime);
   console.log("Aircraft params:", aircraftParams);
   
-  // Filter data to the specified time bounds (exactly like Python mask)
+  // Filter data to the specified time bounds
   const filteredData = data.filter(point => 
     point.timestamp >= startTime && point.timestamp <= endTime
   );
@@ -33,111 +23,59 @@ export const calculateAerodynamicCoefficients = (
     return [];
   }
   
-  // Extract time and acceleration data exactly as in Python algorithm
-  const time = filteredData.map(point => point.timestamp);
-  const lin_accel = filteredData.map(point => extractSensorData(point));
+  // Constants
+  const rho = aircraftParams.airDensity; // kg/m³
+  const mass = aircraftParams.aircraftWeight; // kg
+  const S = aircraftParams.wingSurfaceArea; // m²
+  const g = 9.81; // m/s²
   
-  console.log("Sample time data:", time.slice(0, 5));
-  console.log("Sample acceleration data:", lin_accel.slice(0, 3));
+  console.log("Using constants - rho:", rho, "mass:", mass, "S:", S);
   
-  // Compute dt for each sample (prepend first dt = 0) - exactly like Python np.diff(time, prepend=time[0])
-  const dt = [0]; // First dt is 0
-  for (let i = 1; i < time.length; i++) {
-    dt.push(time[i] - time[i - 1]);
-  }
+  // Extract pressure and forward acceleration data
+  const pressures: number[] = [];
+  const forwardAccels: number[] = [];
+  const timestamps: number[] = [];
   
-  console.log("Sample dt values:", dt.slice(0, 5));
-  
-  // Integrate acceleration → velocity (forward Euler) - exactly like Python np.cumsum
-  const v: number[][] = [];
-  let vx = 0, vy = 0, vz = 0;
-  
-  for (let i = 0; i < filteredData.length; i++) {
-    if (i === 0) {
-      v.push([0, 0, 0]); // Initial velocity is zero
-    } else {
-      vx += lin_accel[i][0] * dt[i];
-      vy += lin_accel[i][1] * dt[i];
-      vz += lin_accel[i][2] * dt[i];
-      v.push([vx, vy, vz]);
-    }
-  }
-  
-  // Calculate velocity magnitude for each point (exactly like Python np.linalg.norm)
-  const v_mag = v.map(vel => Math.sqrt(vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]));
-  
-  console.log("Sample velocity magnitudes:", v_mag.slice(0, 5));
-  
-  // Aerodynamic force = m * a (exactly like Python)
-  const F_aero: number[][] = [];
-  for (let i = 0; i < filteredData.length; i++) {
-    F_aero.push([
-      aircraftParams.aircraftWeight * lin_accel[i][0],
-      aircraftParams.aircraftWeight * lin_accel[i][1],
-      aircraftParams.aircraftWeight * lin_accel[i][2]
-    ]);
-  }
-  
-  // Decompose into drag (along velocity) and lift (perpendicular) - exactly like Python
-  const drag_proj: number[] = [];
-  const drag_unit: number[][] = [];
-  const D_vec: number[][] = [];
-  const L_vec: number[][] = [];
-  
-  for (let i = 0; i < filteredData.length; i++) {
-    // Calculate drag projection (dot product F_aero · v)
-    const dotProduct = F_aero[i][0] * v[i][0] + F_aero[i][1] * v[i][1] + F_aero[i][2] * v[i][2];
-    const proj = dotProduct / (v_mag[i] + 1e-8);
-    drag_proj.push(proj);
+  filteredData.forEach(point => {
+    const pressure = point['Pressure'] || point['pressure'] || 0;
+    const forwardAccel = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
     
-    // Drag unit vector
-    const unit = [
-      v[i][0] / (v_mag[i] + 1e-8),
-      v[i][1] / (v_mag[i] + 1e-8),
-      v[i][2] / (v_mag[i] + 1e-8)
-    ];
-    drag_unit.push(unit);
-    
-    // Drag vector
-    const d_vec = [
-      proj * unit[0],
-      proj * unit[1],
-      proj * unit[2]
-    ];
-    D_vec.push(d_vec);
-    
-    // Lift vector (perpendicular to velocity)
-    const l_vec = [
-      F_aero[i][0] - d_vec[0],
-      F_aero[i][1] - d_vec[1],
-      F_aero[i][2] - d_vec[2]
-    ];
-    L_vec.push(l_vec);
-  }
+    pressures.push(pressure);
+    forwardAccels.push(forwardAccel);
+    timestamps.push(point.timestamp);
+  });
   
+  console.log("Sample pressure data:", pressures.slice(0, 5));
+  console.log("Sample forward acceleration data:", forwardAccels.slice(0, 5));
+  
+  // Convert dynamic pressure to velocity: V = sqrt(2 * q / rho)
+  const velocities = pressures.map(pressure => Math.sqrt(2 * pressure / rho));
+  
+  // Compute lift force (steady, level flight: lift ≈ weight)
+  const lift_force = mass * g;
+  
+  // Compute coefficients for each sample
   const coefficients: AerodynamicCoefficient[] = [];
   
-  // Calculate coefficients for each point
   for (let i = 0; i < filteredData.length; i++) {
-    const L_mag = Math.sqrt(L_vec[i][0] * L_vec[i][0] + L_vec[i][1] * L_vec[i][1] + L_vec[i][2] * L_vec[i][2]);
-    const D_mag = Math.sqrt(D_vec[i][0] * D_vec[i][0] + D_vec[i][1] * D_vec[i][1] + D_vec[i][2] * D_vec[i][2]);
-    const q_dyn = 0.5 * aircraftParams.airDensity * v_mag[i] * v_mag[i];
+    const velocity = velocities[i];
+    const q_value = 0.5 * rho * velocity * velocity; // Should match pressure if pressure is dynamic pressure
     
-    // Calculate coefficients exactly like Python
-    const CL = L_mag / (q_dyn * aircraftParams.wingSurfaceArea + 1e-8);
-    const CD = D_mag / (q_dyn * aircraftParams.wingSurfaceArea + 1e-8);
+    const CL = lift_force / (q_value * S + 1e-8);
+    const drag_force = mass * Math.abs(forwardAccels[i]);
+    const CD = drag_force / (q_value * S + 1e-8);
     
     coefficients.push({
-      timestamp: filteredData[i].timestamp,
+      timestamp: timestamps[i],
       CL: CL,
       CD: CD,
-      velocity: v_mag[i],
-      dynamicPressure: q_dyn
+      velocity: velocity,
+      dynamicPressure: q_value
     });
     
     // Log progress every 20 points
     if (i % 20 === 0) {
-      console.log(`Processing point ${i}/${filteredData.length}, Velocity: ${v_mag[i].toFixed(2)}, CL: ${CL.toFixed(4)}, CD: ${CD.toFixed(4)}`);
+      console.log(`Processing point ${i}/${filteredData.length}, Velocity: ${velocity.toFixed(2)}, CL: ${CL.toFixed(4)}, CD: ${CD.toFixed(4)}`);
     }
   }
   

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { RawData, FlightBounds } from "@/types";
 import { Clock } from "lucide-react";
 
@@ -39,7 +40,6 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
 
     // Convert time inputs to data indices based on the actual timestamps
     const firstTimestamp = data.data[0].timestamp;
-    const lastTimestamp = data.data[data.data.length - 1].timestamp;
     
     // Find the closest data points to the specified times
     const targetStartTime = firstTimestamp + startTime;
@@ -74,6 +74,23 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
     console.log("Setting bounds:", bounds);
     onBoundsSet(bounds);
   };
+
+  // Prepare data for visualization
+  const chartData = data.data.map((point, index) => {
+    const accelX = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
+    const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || point['LinAccel Y'] || 0;
+    const accelZ = point['Linear Accel Z'] || point['linear_accel_z'] || point['LinAccel Z'] || 0;
+    const pressure = point['Pressure'] || point['pressure'] || 0;
+    
+    return {
+      index,
+      time: ((point.timestamp - data.data[0].timestamp)).toFixed(2),
+      accelX: Number(accelX.toFixed(4)),
+      accelY: Number(accelY.toFixed(4)),
+      accelZ: Number(accelZ.toFixed(4)),
+      pressure: Number(pressure.toFixed(4))
+    };
+  });
 
   return (
     <Card>
@@ -118,6 +135,86 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
         <Button onClick={handleSetBounds} className="w-full">
           Set Flight Bounds
         </Button>
+
+        {/* Acceleration and Pressure Data Visualization */}
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-4">Flight Data Overview</h3>
+          <div className="h-64 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="time" 
+                  label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
+                />
+                <YAxis 
+                  label={{ value: 'Acceleration (m/s²)', angle: -90, position: 'insideLeft' }} 
+                />
+                <Tooltip 
+                  formatter={(value, name) => [
+                    Number(value).toFixed(4), 
+                    name === 'accelX' ? 'Linear Accel X' : 
+                    name === 'accelY' ? 'Linear Accel Y' : 'Linear Accel Z'
+                  ]}
+                  labelFormatter={(label) => `Time: ${label}s`}
+                />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="accelX" 
+                  stroke="#0EA5E9" 
+                  name="Linear Accel X" 
+                  dot={false}
+                  strokeWidth={2}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="accelY" 
+                  stroke="#8E9196" 
+                  name="Linear Accel Y" 
+                  dot={false}
+                  strokeWidth={2}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="accelZ" 
+                  stroke="#EA384C" 
+                  name="Linear Accel Z" 
+                  dot={false}
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="time" 
+                  label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
+                />
+                <YAxis 
+                  label={{ value: 'Pressure (Pa)', angle: -90, position: 'insideLeft' }} 
+                />
+                <Tooltip 
+                  formatter={(value) => [Number(value).toFixed(4), 'Pressure']}
+                  labelFormatter={(label) => `Time: ${label}s`}
+                />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="pressure" 
+                  stroke="#10B981" 
+                  name="Pressure" 
+                  dot={false}
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

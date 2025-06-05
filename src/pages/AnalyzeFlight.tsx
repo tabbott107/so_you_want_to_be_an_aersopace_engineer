@@ -1,12 +1,11 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { RawData, FlightBounds, AircraftParameters, AerodynamicCoefficient } from "@/types";
 import { calculateAerodynamicCoefficients } from "@/utils/aerodynamicCalculations";
-import { Rocket, Download, BarChart3, Clock } from "lucide-react";
+import { Rocket, Download, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 
 interface AnalyzeFlightProps {
@@ -18,35 +17,25 @@ interface AnalyzeFlightProps {
 
 const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   data,
-  bounds: initialBounds,
+  bounds,
   aircraftParams,
   onBack
 }) => {
   const [coefficients, setCoefficients] = useState<AerodynamicCoefficient[]>([]);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [startTime, setStartTime] = useState(0);
-  const [endTime, setEndTime] = useState(10);
 
-  // Calculate total time duration from data
-  const totalDuration = data.data.length > 0 ? 
-    (data.data[data.data.length - 1].timestamp - data.data[0].timestamp) : 0;
+  // Calculate start and end times from bounds
+  const startTime = bounds ? data.data[bounds.flightStart].timestamp : 0;
+  const endTime = bounds ? data.data[bounds.flightEnd].timestamp : 10;
 
   useEffect(() => {
-    // Initialize time inputs based on the actual bounds passed from previous section
-    if (initialBounds && data.data.length > 0) {
-      const startSeconds = data.data[initialBounds.flightStart].timestamp;
-      const endSeconds = data.data[initialBounds.flightEnd].timestamp;
-      setStartTime(startSeconds);
-      setEndTime(endSeconds);
-    }
-    
     calculateCoefficients();
-  }, [data, initialBounds, aircraftParams]);
+  }, [data, bounds, aircraftParams]);
 
   const calculateCoefficients = async () => {
     setIsCalculating(true);
     try {
-      console.log("Calculating aerodynamic coefficients with time bounds...");
+      console.log("Calculating aerodynamic coefficients with bounds...");
       console.log("Start time:", startTime, "End time:", endTime);
       
       const result = calculateAerodynamicCoefficients(data.data, startTime, endTime, aircraftParams);
@@ -60,41 +49,33 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
     }
   };
 
-  const handleUpdateBounds = () => {
-    if (startTime >= endTime) {
-      toast.error("Start time must be less than end time");
-      return;
-    }
-
-    // Recalculate coefficients with new bounds
-    calculateCoefficients();
-    toast.success("Flight bounds updated and coefficients recalculated");
-  };
-
-  // Calculate average coefficients from the filtered time period
+  // Calculate average coefficients and standard deviations
   const avgCL = coefficients.length > 0 ? 
     coefficients.reduce((sum, c) => sum + c.CL, 0) / coefficients.length : 0;
   const avgCD = coefficients.length > 0 ? 
     coefficients.reduce((sum, c) => sum + c.CD, 0) / coefficients.length : 0;
   
+  const stdCL = coefficients.length > 1 ? 
+    Math.sqrt(coefficients.reduce((sum, c) => sum + Math.pow(c.CL - avgCL, 2), 0) / (coefficients.length - 1)) : 0;
+  const stdCD = coefficients.length > 1 ? 
+    Math.sqrt(coefficients.reduce((sum, c) => sum + Math.pow(c.CD - avgCD, 2), 0) / (coefficients.length - 1)) : 0;
+  
   const liftToDragRatio = avgCD > 0 ? avgCL / avgCD : 0;
 
-  // Prepare acceleration data for the selected flight period only
+  // Prepare data for visualization (filtered to time bounds)
   const flightData = data.data.filter(point => 
     point.timestamp >= startTime && point.timestamp <= endTime
   );
   
-  const accelChartData = flightData.map((point, index) => {
-    const accelX = point['Linear Accel X'] || point['linear_accel_x'] || 0;
-    const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || 0;
-    const accelZ = point['Linear Accel Z'] || point['linear_accel_z'] || 0;
+  const sensorChartData = flightData.map((point, index) => {
+    const accelX = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
+    const pressure = point['Pressure'] || point['pressure'] || 0;
     
     return {
       index,
       time: ((point.timestamp - flightData[0].timestamp)).toFixed(2),
       accelX: Number(accelX.toFixed(4)),
-      accelY: Number(accelY.toFixed(4)),
-      accelZ: Number(accelZ.toFixed(4))
+      pressure: Number(pressure.toFixed(4))
     };
   });
 
@@ -138,12 +119,13 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
             <BarChart3 className="h-12 w-12 text-blue-600 mr-3" />
           </div>
           <h1 className="text-3xl font-bold mt-2 text-gray-800">Flight Analysis Results</h1>
-          <p className="text-gray-600 mt-2">Aerodynamic coefficients calculated from IMU data</p>
+          <p className="text-gray-600 mt-2">Aerodynamic coefficients calculated from pressure and acceleration data</p>
+          <p className="text-sm text-gray-500 mt-1">Time Period: {startTime.toFixed(2)}s - {endTime.toFixed(2)}s</p>
         </header>
 
         <div className="space-y-6">
-          {/* Average Coefficients Display */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Coefficient Statistics Display */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Average Lift Coefficient</CardTitle>
@@ -152,6 +134,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                 <div className="bg-green-50 p-4 rounded-lg">
                   <p className="text-3xl font-bold text-green-700">{avgCL.toFixed(4)}</p>
                   <p className="text-sm text-gray-600">C_L (mean)</p>
+                  <p className="text-xs text-gray-500">±{stdCL.toFixed(4)} std</p>
                 </div>
               </CardContent>
             </Card>
@@ -164,6 +147,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                 <div className="bg-red-50 p-4 rounded-lg">
                   <p className="text-3xl font-bold text-red-700">{avgCD.toFixed(4)}</p>
                   <p className="text-sm text-gray-600">C_D (mean)</p>
+                  <p className="text-xs text-gray-500">±{stdCD.toFixed(4)} std</p>
                 </div>
               </CardContent>
             </Card>
@@ -179,31 +163,39 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Data Points</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <p className="text-3xl font-bold text-purple-700">{coefficients.length}</p>
+                  <p className="text-sm text-gray-600">Samples</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Flight Acceleration Graph - Only for selected time period */}
+          {/* Forward Acceleration Data Graph */}
           <Card>
             <CardHeader>
-              <CardTitle>Flight Acceleration Data (Time Period: {startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
+              <CardTitle>Forward Acceleration Data (Time Period: {startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={accelChartData}>
+                  <LineChart data={sensorChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       dataKey="time" 
                       label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
                     />
                     <YAxis 
-                      label={{ value: 'Acceleration (m/s²)', angle: -90, position: 'insideLeft' }} 
+                      label={{ value: 'Forward Acceleration (m/s²)', angle: -90, position: 'insideLeft' }} 
                     />
                     <Tooltip 
-                      formatter={(value, name) => [
-                        Number(value).toFixed(4), 
-                        name === 'accelX' ? 'Linear Accel X' : 
-                        name === 'accelY' ? 'Linear Accel Y' : 'Linear Accel Z'
-                      ]}
+                      formatter={(value) => [Number(value).toFixed(4), 'Forward Acceleration']}
                       labelFormatter={(label) => `Time: ${label}s`}
                     />
                     <Legend />
@@ -211,23 +203,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                       type="monotone" 
                       dataKey="accelX" 
                       stroke="#0EA5E9" 
-                      name="Linear Accel X" 
-                      dot={false}
-                      strokeWidth={2}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="accelY" 
-                      stroke="#8E9196" 
-                      name="Linear Accel Y" 
-                      dot={false}
-                      strokeWidth={2}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="accelZ" 
-                      stroke="#EA384C" 
-                      name="Linear Accel Z" 
+                      name="Forward Acceleration" 
                       dot={false}
                       strokeWidth={2}
                     />
@@ -237,57 +213,45 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
             </CardContent>
           </Card>
 
-          {/* Flight Bounds Update */}
+          {/* Pressure Data Graph */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Clock className="mr-2" />
-                Update Flight Time Bounds
-              </CardTitle>
+              <CardTitle>Pressure Data (Time Period: {startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="start-time">Flight Start Time (seconds)</Label>
-                  <Input
-                    id="start-time"
-                    type="number"
-                    step="0.1"
-                    value={startTime}
-                    onChange={(e) => setStartTime(parseFloat(e.target.value) || 0)}
-                    placeholder="Enter start time"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="end-time">Flight End Time (seconds)</Label>
-                  <Input
-                    id="end-time"
-                    type="number"
-                    step="0.1"
-                    value={endTime}
-                    onChange={(e) => setEndTime(parseFloat(e.target.value) || 0)}
-                    placeholder="Enter end time"
-                  />
-                </div>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={sensorChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="time" 
+                      label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
+                    />
+                    <YAxis 
+                      label={{ value: 'Pressure (Pa)', angle: -90, position: 'insideLeft' }} 
+                    />
+                    <Tooltip 
+                      formatter={(value) => [Number(value).toFixed(4), 'Pressure']}
+                      labelFormatter={(label) => `Time: ${label}s`}
+                    />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="pressure" 
+                      stroke="#10B981" 
+                      name="Pressure" 
+                      dot={false}
+                      strokeWidth={2}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-              
-              <div className="text-sm text-gray-600">
-                Current flight duration: {((endTime - startTime)).toFixed(2)} seconds
-                <br />
-                Data points in bounds: {coefficients.length}
-                <br />
-                Average CL: {avgCL.toFixed(4)} | Average CD: {avgCD.toFixed(4)}
-              </div>
-              
-              <Button onClick={handleUpdateBounds} className="w-full">
-                Update Flight Bounds & Recalculate
-              </Button>
             </CardContent>
           </Card>
 
           <div className="flex justify-center space-x-4">
             <Button onClick={onBack} variant="outline">
-              Back to Visualization
+              Back to Flight Bounds
             </Button>
             <Button onClick={downloadResults} className="flex items-center">
               <Download className="mr-2 h-4 w-4" />
