@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +24,6 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
 }) => {
   const [coefficients, setCoefficients] = useState<AerodynamicCoefficient[]>([]);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [bounds, setBounds] = useState<FlightBounds>(initialBounds);
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(10);
 
@@ -36,9 +34,8 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   useEffect(() => {
     // Initialize time inputs based on the actual bounds passed from previous section
     if (initialBounds && data.data.length > 0) {
-      const firstTimestamp = data.data[0].timestamp;
-      const startSeconds = (data.data[initialBounds.flightStart].timestamp - firstTimestamp);
-      const endSeconds = (data.data[initialBounds.flightEnd].timestamp - firstTimestamp);
+      const startSeconds = data.data[initialBounds.flightStart].timestamp;
+      const endSeconds = data.data[initialBounds.flightEnd].timestamp;
       setStartTime(startSeconds);
       setEndTime(endSeconds);
     }
@@ -49,8 +46,10 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   const calculateCoefficients = async () => {
     setIsCalculating(true);
     try {
-      console.log("Calculating aerodynamic coefficients...");
-      const result = calculateAerodynamicCoefficients(data.data, bounds, aircraftParams);
+      console.log("Calculating aerodynamic coefficients with time bounds...");
+      console.log("Start time:", startTime, "End time:", endTime);
+      
+      const result = calculateAerodynamicCoefficients(data.data, startTime, endTime, aircraftParams);
       setCoefficients(result);
       toast.success("Aerodynamic coefficients calculated successfully");
     } catch (error) {
@@ -67,56 +66,24 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
       return;
     }
 
-    // Convert time inputs to data indices based on the actual timestamps
-    const firstTimestamp = data.data[0].timestamp;
-    const targetStartTime = firstTimestamp + startTime;
-    const targetEndTime = firstTimestamp + endTime;
-    
-    let startIndex = 0;
-    let endIndex = data.data.length - 1;
-    
-    // Find start index
-    for (let i = 0; i < data.data.length; i++) {
-      if (data.data[i].timestamp >= targetStartTime) {
-        startIndex = i;
-        break;
-      }
-    }
-    
-    // Find end index
-    for (let i = data.data.length - 1; i >= 0; i--) {
-      if (data.data[i].timestamp <= targetEndTime) {
-        endIndex = i;
-        break;
-      }
-    }
-
-    const newBounds: FlightBounds = {
-      flightStart: startIndex,
-      flightEnd: endIndex,
-      stationaryStart: bounds.stationaryStart,
-      stationaryEnd: bounds.stationaryEnd
-    };
-
-    setBounds(newBounds);
-    toast.success("Flight bounds updated");
+    // Recalculate coefficients with new bounds
+    calculateCoefficients();
+    toast.success("Flight bounds updated and coefficients recalculated");
   };
 
-  // Calculate average coefficients using time-based filtering (like Python algorithm)
-  const timeBasedCoefficients = coefficients.filter(coeff => {
-    const relativeTime = (coeff.timestamp - coefficients[0]?.timestamp || 0);
-    return relativeTime >= startTime && relativeTime <= endTime;
-  });
-
-  const avgCL = timeBasedCoefficients.length > 0 ? 
-    timeBasedCoefficients.reduce((sum, c) => sum + c.CL, 0) / timeBasedCoefficients.length : 0;
-  const avgCD = timeBasedCoefficients.length > 0 ? 
-    timeBasedCoefficients.reduce((sum, c) => sum + c.CD, 0) / timeBasedCoefficients.length : 0;
+  // Calculate average coefficients from the filtered time period
+  const avgCL = coefficients.length > 0 ? 
+    coefficients.reduce((sum, c) => sum + c.CL, 0) / coefficients.length : 0;
+  const avgCD = coefficients.length > 0 ? 
+    coefficients.reduce((sum, c) => sum + c.CD, 0) / coefficients.length : 0;
   
   const liftToDragRatio = avgCD > 0 ? avgCL / avgCD : 0;
 
-  // Prepare acceleration data for the flight period
-  const flightData = data.data.slice(bounds.flightStart, bounds.flightEnd + 1);
+  // Prepare acceleration data for the selected flight period only
+  const flightData = data.data.filter(point => 
+    point.timestamp >= startTime && point.timestamp <= endTime
+  );
+  
   const accelChartData = flightData.map((point, index) => {
     const accelX = point['Linear Accel X'] || point['linear_accel_x'] || 0;
     const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || 0;
@@ -134,9 +101,8 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   const downloadResults = () => {
     const csvContent = [
       "Time(s),CL,CD,Velocity(m/s),DynamicPressure(Pa)",
-      ...timeBasedCoefficients.map(coeff => {
-        const relativeTime = (coeff.timestamp - coefficients[0]?.timestamp || 0);
-        return `${relativeTime.toFixed(2)},${coeff.CL.toFixed(4)},${coeff.CD.toFixed(4)},${coeff.velocity.toFixed(2)},${coeff.dynamicPressure.toFixed(2)}`;
+      ...coefficients.map(coeff => {
+        return `${coeff.timestamp.toFixed(2)},${coeff.CL.toFixed(4)},${coeff.CD.toFixed(4)},${coeff.velocity.toFixed(2)},${coeff.dynamicPressure.toFixed(2)}`;
       })
     ].join("\n");
     
@@ -215,10 +181,10 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
             </Card>
           </div>
 
-          {/* Flight Acceleration Graph */}
+          {/* Flight Acceleration Graph - Only for selected time period */}
           <Card>
             <CardHeader>
-              <CardTitle>Flight Acceleration Data</CardTitle>
+              <CardTitle>Flight Acceleration Data (Time Period: {startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -308,7 +274,9 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
               <div className="text-sm text-gray-600">
                 Current flight duration: {((endTime - startTime)).toFixed(2)} seconds
                 <br />
-                Data points in bounds: {timeBasedCoefficients.length}
+                Data points in bounds: {coefficients.length}
+                <br />
+                Average CL: {avgCL.toFixed(4)} | Average CD: {avgCD.toFixed(4)}
               </div>
               
               <Button onClick={handleUpdateBounds} className="w-full">
