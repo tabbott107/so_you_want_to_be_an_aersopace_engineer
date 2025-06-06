@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -209,12 +208,13 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                       label={{ value: 'Values', angle: -90, position: 'insideLeft' }} 
                     />
                     <Tooltip 
-                      formatter={(value, name) => [
-                        Number(value).toFixed(4), 
-                        name === 'accelX' ? 'LinAccel X' : 
-                        name === 'accelY' ? 'LinAccel Y' : 
-                        name === 'accelZ' ? 'LinAccel Z' : 'Pressure'
-                      ]}
+                      formatter={(value, name) => {
+                        const displayName = name === 'accelX' ? 'LinAccel X' : 
+                                          name === 'accelY' ? 'LinAccel Y' : 
+                                          name === 'accelZ' ? 'LinAccel Z' : 
+                                          name === 'pressure' ? 'Pressure' : name;
+                        return [Number(value).toFixed(4), displayName];
+                      }}
                       labelFormatter={(label) => `Time: ${label}s`}
                     />
                     <Legend />

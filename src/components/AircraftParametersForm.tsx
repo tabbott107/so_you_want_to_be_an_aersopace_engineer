@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,8 +19,8 @@ interface AircraftParametersFormProps {
 const AircraftParametersForm: React.FC<AircraftParametersFormProps> = ({ 
   onParametersSubmit 
 }) => {
-  const [wingSurfaceArea, setWingSurfaceArea] = useState<string>("10");
-  const [aircraftWeight, setAircraftWeight] = useState<string>("1.5");
+  const [wingSurfaceArea, setWingSurfaceArea] = useState<string>("0.07");
+  const [aircraftWeight, setAircraftWeight] = useState<string>("0.1");
   const [airDensity, setAirDensity] = useState<string>("1.225");
 
   const handleSubmit = (e: React.FormEvent) => {
