@@ -64,22 +64,28 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   const liftToDragRatio = avgCD > 0 ? avgCL / avgCD : 0;
 
   // Prepare data for visualization (filtered to time bounds)
-  const firstTimestamp = data.data[0].timestamp;
-  const targetStartTime = firstTimestamp + startTime;
-  const targetEndTime = firstTimestamp + endTime;
-  
   const flightData = data.data.filter(point => 
-    point.timestamp >= targetStartTime && point.timestamp <= targetEndTime
+    point.timestamp >= startTime && point.timestamp <= endTime
   );
   
   const chartData = flightData.map((point) => {
-    const accelX = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
-    const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || point['LinAccel Y'] || 0;
-    const accelZ = point['Linear Accel Z'] || point['linear_accel_z'] || point['LinAccel Z'] || 0;
+    // Try different possible column names for accelerations
+    const accelX = point['LinAccel X'] || point['Linear Accel X'] || 
+                  point['linear_accel_x'] || point['linaccel_x'] || 
+                  point['LinAccelX'] || point['LinearAccelX'] || 0;
+    
+    const accelY = point['LinAccel Y'] || point['Linear Accel Y'] || 
+                  point['linear_accel_y'] || point['linaccel_y'] || 
+                  point['LinAccelY'] || point['LinearAccelY'] || 0;
+    
+    const accelZ = point['LinAccel Z'] || point['Linear Accel Z'] || 
+                  point['linear_accel_z'] || point['linaccel_z'] || 
+                  point['LinAccelZ'] || point['LinearAccelZ'] || 0;
+    
     const pressure = point['Pressure'] || point['pressure'] || 0;
     
     return {
-      time: Number(((point.timestamp - targetStartTime) + startTime).toFixed(2)),
+      time: Number(point.timestamp.toFixed(2)),
       accelX: Number(accelX.toFixed(4)),
       accelY: Number(accelY.toFixed(4)),
       accelZ: Number(accelZ.toFixed(4)),
@@ -205,9 +211,9 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                     <Tooltip 
                       formatter={(value, name) => [
                         Number(value).toFixed(4), 
-                        name === 'accelX' ? 'Linear Accel X' : 
-                        name === 'accelY' ? 'Linear Accel Y' : 
-                        name === 'accelZ' ? 'Linear Accel Z' : 'Pressure'
+                        name === 'accelX' ? 'LinAccel X' : 
+                        name === 'accelY' ? 'LinAccel Y' : 
+                        name === 'accelZ' ? 'LinAccel Z' : 'Pressure'
                       ]}
                       labelFormatter={(label) => `Time: ${label}s`}
                     />
@@ -216,7 +222,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                       type="monotone" 
                       dataKey="accelX" 
                       stroke="#0EA5E9" 
-                      name="Linear Accel X" 
+                      name="LinAccel X" 
                       dot={false}
                       strokeWidth={2}
                     />
@@ -224,7 +230,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                       type="monotone" 
                       dataKey="accelY" 
                       stroke="#8E9196" 
-                      name="Linear Accel Y" 
+                      name="LinAccel Y" 
                       dot={false}
                       strokeWidth={2}
                     />
@@ -232,7 +238,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                       type="monotone" 
                       dataKey="accelZ" 
                       stroke="#EA384C" 
-                      name="Linear Accel Z" 
+                      name="LinAccel Z" 
                       dot={false}
                       strokeWidth={2}
                     />

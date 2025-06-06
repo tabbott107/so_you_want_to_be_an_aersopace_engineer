@@ -11,17 +11,9 @@ export const calculateAerodynamicCoefficients = (
   console.log("Start time:", startTime, "End time:", endTime);
   console.log("Aircraft params:", aircraftParams);
   
-  // Get the first timestamp to calculate relative time bounds
-  const firstTimestamp = data[0].timestamp;
-  const targetStartTime = firstTimestamp + startTime;
-  const targetEndTime = firstTimestamp + endTime;
-  
-  console.log("First timestamp:", firstTimestamp);
-  console.log("Target start time:", targetStartTime, "Target end time:", targetEndTime);
-  
-  // Filter data to the specified time bounds
+  // Filter data to the specified time bounds directly
   const filteredData = data.filter(point => 
-    point.timestamp >= targetStartTime && point.timestamp <= targetEndTime
+    point.timestamp >= startTime && point.timestamp <= endTime
   );
   
   console.log("Filtered data length:", filteredData.length);
@@ -45,9 +37,17 @@ export const calculateAerodynamicCoefficients = (
   const timestamps: number[] = [];
   
   filteredData.forEach(point => {
+    // Try different possible column names for pressure
     const pressure = point['Pressure'] || point['pressure'] || 0;
-    const forwardAccel = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
-    const verticalAccel = point['Linear Accel Y'] || point['linear_accel_y'] || point['LinAccel Y'] || 0;
+    
+    // Try different possible column names for accelerations
+    const forwardAccel = point['LinAccel X'] || point['Linear Accel X'] || 
+                        point['linear_accel_x'] || point['linaccel_x'] || 
+                        point['LinAccelX'] || point['LinearAccelX'] || 0;
+    
+    const verticalAccel = point['LinAccel Y'] || point['Linear Accel Y'] || 
+                         point['linear_accel_y'] || point['linaccel_y'] || 
+                         point['LinAccelY'] || point['LinearAccelY'] || 0;
     
     pressures.push(pressure);
     forwardAccels.push(forwardAccel);

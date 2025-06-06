@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,7 +65,7 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
       setAvailableColumns(columns);
       
       // Set default selection to Linear Accel X, Y, Z and Pressure
-      const defaultColumns = ['linear_accel_x', 'linear_accel_y', 'linear_accel_z', 'pressure'];
+      const defaultColumns = ['linaccel_x', 'linaccel_y', 'linaccel_z', 'pressure'];
       const availableDefaults = defaultColumns.filter(col => 
         columns.some(c => c.key === col)
       );
@@ -74,8 +73,19 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
       if (availableDefaults.length > 0) {
         setSelectedColumns(availableDefaults);
       } else {
-        // Fallback to first 4 columns if default columns not found
-        setSelectedColumns(columns.slice(0, 4).map(c => c.key));
+        // Fallback: look for variations of the column names
+        const fallbackColumns = columns.filter(col => 
+          col.key.includes('linaccel') || 
+          col.key.includes('linear_accel') || 
+          col.key.includes('pressure')
+        ).map(c => c.key);
+        
+        if (fallbackColumns.length > 0) {
+          setSelectedColumns(fallbackColumns);
+        } else {
+          // Final fallback to first 4 columns
+          setSelectedColumns(columns.slice(0, 4).map(c => c.key));
+        }
       }
     }
   }, [rawData]);
