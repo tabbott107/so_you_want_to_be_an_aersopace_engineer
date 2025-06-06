@@ -46,35 +46,16 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
       return;
     }
 
-    // Convert time inputs to data indices based on the actual timestamps
+    // Convert relative time inputs to actual timestamps
     const firstTimestamp = data.data[0].timestamp;
-    
-    // Find the closest data points to the specified times
     const targetStartTime = firstTimestamp + startTimeNum;
     const targetEndTime = firstTimestamp + endTimeNum;
     
-    let startIndex = 0;
-    let endIndex = data.data.length - 1;
-    
-    // Find start index
-    for (let i = 0; i < data.data.length; i++) {
-      if (data.data[i].timestamp >= targetStartTime) {
-        startIndex = i;
-        break;
-      }
-    }
-    
-    // Find end index
-    for (let i = data.data.length - 1; i >= 0; i--) {
-      if (data.data[i].timestamp <= targetEndTime) {
-        endIndex = i;
-        break;
-      }
-    }
+    console.log("Target start time:", targetStartTime, "Target end time:", targetEndTime);
 
     const bounds: FlightBounds = {
-      flightStart: startIndex,
-      flightEnd: endIndex,
+      flightStart: startTimeNum,
+      flightEnd: endTimeNum,
       stationaryStart: 0,
       stationaryEnd: 0
     };
@@ -114,7 +95,7 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
             <Label htmlFor="start-time">Flight Start Time (seconds)</Label>
             <Input
               id="start-time"
-              type="text"
+              type="number"
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
               placeholder="Enter start time"
@@ -124,7 +105,7 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
             <Label htmlFor="end-time">Flight End Time (seconds)</Label>
             <Input
               id="end-time"
-              type="text"
+              type="number"
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
               placeholder="Enter end time"
@@ -142,7 +123,7 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
           Set Flight Bounds
         </Button>
 
-        {/* Combined Acceleration and Pressure Data Visualization */}
+        {/* Flight Data Visualization */}
         <div className="mt-6">
           <h3 className="text-lg font-semibold mb-4">Flight Data Overview</h3>
           <div className="h-64">

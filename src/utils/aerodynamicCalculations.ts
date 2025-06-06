@@ -11,9 +11,17 @@ export const calculateAerodynamicCoefficients = (
   console.log("Start time:", startTime, "End time:", endTime);
   console.log("Aircraft params:", aircraftParams);
   
+  // Get the first timestamp to calculate relative time bounds
+  const firstTimestamp = data[0].timestamp;
+  const targetStartTime = firstTimestamp + startTime;
+  const targetEndTime = firstTimestamp + endTime;
+  
+  console.log("First timestamp:", firstTimestamp);
+  console.log("Target start time:", targetStartTime, "Target end time:", targetEndTime);
+  
   // Filter data to the specified time bounds
   const filteredData = data.filter(point => 
-    point.timestamp >= startTime && point.timestamp <= endTime
+    point.timestamp >= targetStartTime && point.timestamp <= targetEndTime
   );
   
   console.log("Filtered data length:", filteredData.length);

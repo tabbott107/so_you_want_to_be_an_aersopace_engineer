@@ -24,9 +24,9 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   const [coefficients, setCoefficients] = useState<AerodynamicCoefficient[]>([]);
   const [isCalculating, setIsCalculating] = useState(false);
 
-  // Calculate start and end times from bounds
-  const startTime = bounds ? data.data[bounds.flightStart].timestamp : 0;
-  const endTime = bounds ? data.data[bounds.flightEnd].timestamp : 10;
+  // Use the bounds directly as time values
+  const startTime = bounds.flightStart;
+  const endTime = bounds.flightEnd;
 
   useEffect(() => {
     calculateCoefficients();
@@ -63,8 +63,12 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
   const liftToDragRatio = avgCD > 0 ? avgCL / avgCD : 0;
 
   // Prepare data for visualization (filtered to time bounds)
+  const firstTimestamp = data.data[0].timestamp;
+  const targetStartTime = firstTimestamp + startTime;
+  const targetEndTime = firstTimestamp + endTime;
+  
   const flightData = data.data.filter(point => 
-    point.timestamp >= startTime && point.timestamp <= endTime
+    point.timestamp >= targetStartTime && point.timestamp <= targetEndTime
   );
   
   const chartData = flightData.map((point, index) => {
@@ -75,7 +79,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
     
     return {
       index,
-      time: ((point.timestamp - flightData[0].timestamp)).toFixed(2),
+      time: startTime + ((point.timestamp - targetStartTime)).toFixed(2),
       accelX: Number(accelX.toFixed(4)),
       accelY: Number(accelY.toFixed(4)),
       accelZ: Number(accelZ.toFixed(4)),
@@ -181,10 +185,10 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
             </Card>
           </div>
 
-          {/* Flight Data Visualization for Selected Time Period */}
+          {/* Flight Data for Selected Time Period */}
           <Card>
             <CardHeader>
-              <CardTitle>Flight Data for Selected Time Period ({startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
+              <CardTitle>Flight Data ({startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
