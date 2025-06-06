@@ -21,8 +21,8 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
   flightStart = 0,
   flightEnd = 10
 }) => {
-  const [startTime, setStartTime] = useState(flightStart);
-  const [endTime, setEndTime] = useState(flightEnd);
+  const [startTime, setStartTime] = useState(flightStart.toString());
+  const [endTime, setEndTime] = useState(flightEnd.toString());
 
   // Calculate total time duration from data
   const totalDuration = data.data.length > 0 ? 
@@ -33,7 +33,15 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
   console.log("Last timestamp:", data.data[data.data.length - 1]?.timestamp);
 
   const handleSetBounds = () => {
-    if (startTime >= endTime) {
+    const startTimeNum = parseFloat(startTime);
+    const endTimeNum = parseFloat(endTime);
+    
+    if (isNaN(startTimeNum) || isNaN(endTimeNum)) {
+      alert("Please enter valid numbers for start and end times");
+      return;
+    }
+    
+    if (startTimeNum >= endTimeNum) {
       alert("Start time must be less than end time");
       return;
     }
@@ -42,8 +50,8 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
     const firstTimestamp = data.data[0].timestamp;
     
     // Find the closest data points to the specified times
-    const targetStartTime = firstTimestamp + startTime;
-    const targetEndTime = firstTimestamp + endTime;
+    const targetStartTime = firstTimestamp + startTimeNum;
+    const targetEndTime = firstTimestamp + endTimeNum;
     
     let startIndex = 0;
     let endIndex = data.data.length - 1;
@@ -106,10 +114,9 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
             <Label htmlFor="start-time">Flight Start Time (seconds)</Label>
             <Input
               id="start-time"
-              type="number"
-              step="0.1"
+              type="text"
               value={startTime}
-              onChange={(e) => setStartTime(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setStartTime(e.target.value)}
               placeholder="Enter start time"
             />
           </div>
@@ -117,10 +124,9 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
             <Label htmlFor="end-time">Flight End Time (seconds)</Label>
             <Input
               id="end-time"
-              type="number"
-              step="0.1"
+              type="text"
               value={endTime}
-              onChange={(e) => setEndTime(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setEndTime(e.target.value)}
               placeholder="Enter end time"
             />
           </div>
@@ -136,10 +142,10 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
           Set Flight Bounds
         </Button>
 
-        {/* Acceleration and Pressure Data Visualization */}
+        {/* Combined Acceleration and Pressure Data Visualization */}
         <div className="mt-6">
           <h3 className="text-lg font-semibold mb-4">Flight Data Overview</h3>
-          <div className="h-64 mb-4">
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -148,13 +154,14 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
                   label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
                 />
                 <YAxis 
-                  label={{ value: 'Acceleration (m/s²)', angle: -90, position: 'insideLeft' }} 
+                  label={{ value: 'Values', angle: -90, position: 'insideLeft' }} 
                 />
                 <Tooltip 
                   formatter={(value, name) => [
                     Number(value).toFixed(4), 
                     name === 'accelX' ? 'Linear Accel X' : 
-                    name === 'accelY' ? 'Linear Accel Y' : 'Linear Accel Z'
+                    name === 'accelY' ? 'Linear Accel Y' : 
+                    name === 'accelZ' ? 'Linear Accel Z' : 'Pressure'
                   ]}
                   labelFormatter={(label) => `Time: ${label}s`}
                 />
@@ -183,26 +190,6 @@ const FlightBoundsSelector: React.FC<FlightBoundsSelectorProps> = ({
                   dot={false}
                   strokeWidth={2}
                 />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="time" 
-                  label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
-                />
-                <YAxis 
-                  label={{ value: 'Pressure (Pa)', angle: -90, position: 'insideLeft' }} 
-                />
-                <Tooltip 
-                  formatter={(value) => [Number(value).toFixed(4), 'Pressure']}
-                  labelFormatter={(label) => `Time: ${label}s`}
-                />
-                <Legend />
                 <Line 
                   type="monotone" 
                   dataKey="pressure" 

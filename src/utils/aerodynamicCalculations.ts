@@ -7,7 +7,7 @@ export const calculateAerodynamicCoefficients = (
   endTime: number,
   aircraftParams: AircraftParameters
 ): AerodynamicCoefficient[] => {
-  console.log("Starting new aerodynamic coefficient calculation using pressure-based algorithm");
+  console.log("Starting aerodynamic coefficient calculation using pressure-based algorithm");
   console.log("Start time:", startTime, "End time:", endTime);
   console.log("Aircraft params:", aircraftParams);
   
@@ -23,45 +23,49 @@ export const calculateAerodynamicCoefficients = (
     return [];
   }
   
-  // Constants
+  // Constants from aircraft parameters
   const rho = aircraftParams.airDensity; // kg/m³
   const mass = aircraftParams.aircraftWeight; // kg
   const S = aircraftParams.wingSurfaceArea; // m²
-  const g = 9.81; // m/s²
   
   console.log("Using constants - rho:", rho, "mass:", mass, "S:", S);
   
-  // Extract pressure and forward acceleration data
+  // Extract pressure and accelerations in the window
   const pressures: number[] = [];
   const forwardAccels: number[] = [];
+  const verticalAccels: number[] = [];
   const timestamps: number[] = [];
   
   filteredData.forEach(point => {
     const pressure = point['Pressure'] || point['pressure'] || 0;
     const forwardAccel = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
+    const verticalAccel = point['Linear Accel Y'] || point['linear_accel_y'] || point['LinAccel Y'] || 0;
     
     pressures.push(pressure);
     forwardAccels.push(forwardAccel);
+    verticalAccels.push(verticalAccel);
     timestamps.push(point.timestamp);
   });
   
   console.log("Sample pressure data:", pressures.slice(0, 5));
   console.log("Sample forward acceleration data:", forwardAccels.slice(0, 5));
+  console.log("Sample vertical acceleration data:", verticalAccels.slice(0, 5));
   
   // Convert dynamic pressure to velocity: V = sqrt(2 * q / rho)
   const velocities = pressures.map(pressure => Math.sqrt(2 * pressure / rho));
   
-  // Compute lift force (steady, level flight: lift ≈ weight)
-  const lift_force = mass * g;
-  
-  // Compute coefficients for each sample
+  // Compute coefficients for each sample in the window
   const coefficients: AerodynamicCoefficient[] = [];
   
   for (let i = 0; i < filteredData.length; i++) {
     const velocity = velocities[i];
-    const q_value = 0.5 * rho * velocity * velocity; // Should match pressure if pressure is dynamic pressure
+    const q_value = pressures[i]; // pressure is already dynamic pressure in Pa
     
+    // Lift force = mass * a_y (Y axis is lift-direction)
+    const lift_force = mass * verticalAccels[i];
     const CL = lift_force / (q_value * S + 1e-8);
+    
+    // Drag force = mass * |a_x|
     const drag_force = mass * Math.abs(forwardAccels[i]);
     const CD = drag_force / (q_value * S + 1e-8);
     

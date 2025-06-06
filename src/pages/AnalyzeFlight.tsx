@@ -67,14 +67,18 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
     point.timestamp >= startTime && point.timestamp <= endTime
   );
   
-  const sensorChartData = flightData.map((point, index) => {
+  const chartData = flightData.map((point, index) => {
     const accelX = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
+    const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || point['LinAccel Y'] || 0;
+    const accelZ = point['Linear Accel Z'] || point['linear_accel_z'] || point['LinAccel Z'] || 0;
     const pressure = point['Pressure'] || point['pressure'] || 0;
     
     return {
       index,
       time: ((point.timestamp - flightData[0].timestamp)).toFixed(2),
       accelX: Number(accelX.toFixed(4)),
+      accelY: Number(accelY.toFixed(4)),
+      accelZ: Number(accelZ.toFixed(4)),
       pressure: Number(pressure.toFixed(4))
     };
   });
@@ -177,25 +181,30 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
             </Card>
           </div>
 
-          {/* Forward Acceleration Data Graph */}
+          {/* Flight Data Visualization for Selected Time Period */}
           <Card>
             <CardHeader>
-              <CardTitle>Forward Acceleration Data (Time Period: {startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
+              <CardTitle>Flight Data for Selected Time Period ({startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sensorChartData}>
+                  <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       dataKey="time" 
                       label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
                     />
                     <YAxis 
-                      label={{ value: 'Forward Acceleration (m/s²)', angle: -90, position: 'insideLeft' }} 
+                      label={{ value: 'Values', angle: -90, position: 'insideLeft' }} 
                     />
                     <Tooltip 
-                      formatter={(value) => [Number(value).toFixed(4), 'Forward Acceleration']}
+                      formatter={(value, name) => [
+                        Number(value).toFixed(4), 
+                        name === 'accelX' ? 'Linear Accel X' : 
+                        name === 'accelY' ? 'Linear Accel Y' : 
+                        name === 'accelZ' ? 'Linear Accel Z' : 'Pressure'
+                      ]}
                       labelFormatter={(label) => `Time: ${label}s`}
                     />
                     <Legend />
@@ -203,38 +212,26 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
                       type="monotone" 
                       dataKey="accelX" 
                       stroke="#0EA5E9" 
-                      name="Forward Acceleration" 
+                      name="Linear Accel X" 
                       dot={false}
                       strokeWidth={2}
                     />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pressure Data Graph */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Pressure Data (Time Period: {startTime.toFixed(2)}s - {endTime.toFixed(2)}s)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sensorChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="time" 
-                      label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }} 
+                    <Line 
+                      type="monotone" 
+                      dataKey="accelY" 
+                      stroke="#8E9196" 
+                      name="Linear Accel Y" 
+                      dot={false}
+                      strokeWidth={2}
                     />
-                    <YAxis 
-                      label={{ value: 'Pressure (Pa)', angle: -90, position: 'insideLeft' }} 
+                    <Line 
+                      type="monotone" 
+                      dataKey="accelZ" 
+                      stroke="#EA384C" 
+                      name="Linear Accel Z" 
+                      dot={false}
+                      strokeWidth={2}
                     />
-                    <Tooltip 
-                      formatter={(value) => [Number(value).toFixed(4), 'Pressure']}
-                      labelFormatter={(label) => `Time: ${label}s`}
-                    />
-                    <Legend />
                     <Line 
                       type="monotone" 
                       dataKey="pressure" 
