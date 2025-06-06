@@ -13,6 +13,7 @@ const CHART_COLORS = [
   "#0EA5E9", // Sky blue
   "#8E9196", // Neutral gray
   "#EA384C", // Red
+  "#10B981", // Green
   "#33C3F0", // Bright blue
   "#1A1F2C", // Dark purple
   "#FF7300", // Orange
@@ -64,8 +65,8 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
       
       setAvailableColumns(columns);
       
-      // Set default selection to Linear Accel X, Y, Z
-      const defaultColumns = ['linear_accel_x', 'linear_accel_y', 'linear_accel_z'];
+      // Set default selection to Linear Accel X, Y, Z and Pressure
+      const defaultColumns = ['linear_accel_x', 'linear_accel_y', 'linear_accel_z', 'pressure'];
       const availableDefaults = defaultColumns.filter(col => 
         columns.some(c => c.key === col)
       );
@@ -73,8 +74,8 @@ const DataVisualizer: React.FC<DataVisualizerProps> = ({ data }) => {
       if (availableDefaults.length > 0) {
         setSelectedColumns(availableDefaults);
       } else {
-        // Fallback to first 3 columns if Linear Accel columns not found
-        setSelectedColumns(columns.slice(0, 3).map(c => c.key));
+        // Fallback to first 4 columns if default columns not found
+        setSelectedColumns(columns.slice(0, 4).map(c => c.key));
       }
     }
   }, [rawData]);

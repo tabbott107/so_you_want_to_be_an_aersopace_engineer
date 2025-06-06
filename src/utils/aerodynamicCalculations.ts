@@ -7,7 +7,7 @@ export const calculateAerodynamicCoefficients = (
   endTime: number,
   aircraftParams: AircraftParameters
 ): AerodynamicCoefficient[] => {
-  console.log("Starting aerodynamic coefficient calculation using pressure-based algorithm");
+  console.log("Starting aerodynamic coefficient calculation");
   console.log("Start time:", startTime, "End time:", endTime);
   console.log("Aircraft params:", aircraftParams);
   
@@ -60,22 +60,31 @@ export const calculateAerodynamicCoefficients = (
   console.log("Sample vertical acceleration data:", verticalAccels.slice(0, 5));
   
   // Convert dynamic pressure to velocity: V = sqrt(2 * q / rho)
-  const velocities = pressures.map(pressure => Math.sqrt(2 * pressure / rho));
+  const velocities = pressures.map(pressure => Math.sqrt(2 * Math.abs(pressure) / rho));
   
   // Compute coefficients for each sample in the window
   const coefficients: AerodynamicCoefficient[] = [];
+  const CL_values: number[] = [];
+  const CD_values: number[] = [];
   
   for (let i = 0; i < filteredData.length; i++) {
     const velocity = velocities[i];
-    const q_value = pressures[i]; // pressure is already dynamic pressure in Pa
+    const q_value = Math.abs(pressures[i]); // pressure is already dynamic pressure in Pa
+    
+    if (q_value === 0 || velocity === 0) {
+      continue; // Skip invalid data points
+    }
     
     // Lift force = mass * a_y (Y axis is lift-direction)
     const lift_force = mass * verticalAccels[i];
-    const CL = lift_force / (q_value * S + 1e-8);
+    const CL = lift_force / (q_value * S);
     
     // Drag force = mass * |a_x|
     const drag_force = mass * Math.abs(forwardAccels[i]);
-    const CD = drag_force / (q_value * S + 1e-8);
+    const CD = drag_force / (q_value * S);
+    
+    CL_values.push(CL);
+    CD_values.push(CD);
     
     coefficients.push({
       timestamp: timestamps[i],
@@ -84,15 +93,11 @@ export const calculateAerodynamicCoefficients = (
       velocity: velocity,
       dynamicPressure: q_value
     });
-    
-    // Log progress every 20 points
-    if (i % 20 === 0) {
-      console.log(`Processing point ${i}/${filteredData.length}, Velocity: ${velocity.toFixed(2)}, CL: ${CL.toFixed(4)}, CD: ${CD.toFixed(4)}`);
-    }
   }
   
-  console.log("Coefficient calculation complete");
-  console.log("Sample final coefficients:", coefficients.slice(0, 5));
+  console.log("Total valid coefficients calculated:", coefficients.length);
+  console.log("Sample CL values:", CL_values.slice(0, 5));
+  console.log("Sample CD values:", CD_values.slice(0, 5));
   
   return coefficients;
 };

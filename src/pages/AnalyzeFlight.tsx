@@ -40,6 +40,7 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
       
       const result = calculateAerodynamicCoefficients(data.data, startTime, endTime, aircraftParams);
       setCoefficients(result);
+      console.log("Calculated coefficients:", result.length);
       toast.success("Aerodynamic coefficients calculated successfully");
     } catch (error) {
       console.error("Error calculating coefficients:", error);
@@ -71,15 +72,14 @@ const AnalyzeFlight: React.FC<AnalyzeFlightProps> = ({
     point.timestamp >= targetStartTime && point.timestamp <= targetEndTime
   );
   
-  const chartData = flightData.map((point, index) => {
+  const chartData = flightData.map((point) => {
     const accelX = point['Linear Accel X'] || point['linear_accel_x'] || point['LinAccel X'] || 0;
     const accelY = point['Linear Accel Y'] || point['linear_accel_y'] || point['LinAccel Y'] || 0;
     const accelZ = point['Linear Accel Z'] || point['linear_accel_z'] || point['LinAccel Z'] || 0;
     const pressure = point['Pressure'] || point['pressure'] || 0;
     
     return {
-      index,
-      time: startTime + ((point.timestamp - targetStartTime)).toFixed(2),
+      time: Number(((point.timestamp - targetStartTime) + startTime).toFixed(2)),
       accelX: Number(accelX.toFixed(4)),
       accelY: Number(accelY.toFixed(4)),
       accelZ: Number(accelZ.toFixed(4)),
